@@ -76,6 +76,7 @@ const els = {
   roleLabel: document.querySelector("#roleLabel"),
   roleHint: document.querySelector("#roleHint"),
   adminModeButton: document.querySelector("#adminModeButton"),
+  switchAssistantButton: document.querySelector("#switchAssistantButton"),
   adminModal: document.querySelector("#adminModal"),
   adminLoginPanel: document.querySelector("#adminLoginPanel"),
   adminManagePanel: document.querySelector("#adminManagePanel"),
@@ -485,7 +486,8 @@ function setAssistantAccessState(nextHasAccess) {
 }
 
 function setupAdminMode() {
-  els.adminModeButton.addEventListener("click", openAdminModal);
+  els.adminModeButton.addEventListener("click", handleAdminModeButton);
+  els.switchAssistantButton.addEventListener("click", switchToAssistantView);
   document.querySelector("#closeAdminModal").addEventListener("click", closeAdminModal);
   document.querySelector("#adminLoginButton").addEventListener("click", loginAdmin);
   document.querySelector("#adminLogoutButton").addEventListener("click", logoutAdmin);
@@ -497,6 +499,27 @@ function setupAdminMode() {
   els.adminCodeInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") loginAdmin();
   });
+}
+
+async function handleAdminModeButton() {
+  if (!isAdmin && adminCode) {
+    rebuildSupabaseClient();
+    const ok = await verifyAdminSession();
+    if (ok) {
+      await reloadAndRender("已切回管理员模式");
+      return;
+    }
+  }
+  openAdminModal();
+}
+
+function switchToAssistantView() {
+  if (!isAdmin) return;
+  setAdminState(false);
+  closeAdminModal();
+  if (currentPage === "templates") openPage("today");
+  renderAll();
+  showToast("已切到助理视角");
 }
 
 function openAdminModal() {
@@ -614,20 +637,22 @@ function setAdminState(nextIsAdmin) {
 }
 
 function applyRoleUI() {
+  const hasAccess = canAccessData();
   document.body.classList.toggle("is-admin", isAdmin);
   document.body.classList.toggle("is-assistant", !isAdmin);
-  document.body.classList.toggle("is-locked", !canAccessData());
+  document.body.classList.toggle("is-locked", !hasAccess);
   els.roleLabel.textContent = isAdmin
     ? "管理员模式"
-    : hasAssistantAccess
+    : hasAccess
       ? "助理模式"
       : "需要访问码";
   els.roleHint.textContent = isAdmin
     ? "可新建、修改、删除和新增管理员"
-    : hasAssistantAccess
+    : hasAccess
       ? "可查看、复制话术、勾选已发送"
       : "输入助理访问码后才能查看排期";
-  els.adminModeButton.textContent = isAdmin ? "管理设置" : "管理员登录";
+  els.adminModeButton.textContent = isAdmin ? "管理设置" : adminCode ? "切管理员" : "管理员登录";
+  els.switchAssistantButton.hidden = !isAdmin;
   document.querySelectorAll("[data-admin-only]").forEach((element) => {
     element.classList.toggle("admin-only-hidden", !isAdmin);
   });
@@ -643,7 +668,7 @@ function requireAdmin() {
 }
 
 function canAccessData() {
-  return isAdmin || hasAssistantAccess;
+  return isAdmin || hasAssistantAccess || Boolean(adminCode);
 }
 
 function setupGlobalActions() {

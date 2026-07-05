@@ -84,6 +84,13 @@ p {
   min-width: 0;
 }
 
+.mode-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+  align-items: center;
+}
+
 .mode-bar strong,
 .mode-bar span {
   display: block;
