@@ -33,6 +33,7 @@ const SUPABASE_TABLES = {
 };
 
 const ADMIN_STORAGE_KEY = "training-camp-admin-code";
+const ASSISTANT_STORAGE_KEY = "training-camp-assistant-code";
 
 let db = null;
 let currentPage = "today";
@@ -41,7 +42,9 @@ let selectedCalendarDate = toDateInput(new Date());
 let activeTaskId = null;
 let state = emptyState();
 let adminCode = window.localStorage.getItem(ADMIN_STORAGE_KEY) || "";
+let assistantCode = window.localStorage.getItem(ASSISTANT_STORAGE_KEY) || "";
 let isAdmin = false;
+let hasAssistantAccess = false;
 
 const els = {
   todayWeek: document.querySelector("#todayWeek"),
@@ -79,6 +82,9 @@ const els = {
   adminCodeInput: document.querySelector("#adminCodeInput"),
   newAdminName: document.querySelector("#newAdminName"),
   newAdminCode: document.querySelector("#newAdminCode"),
+  assistantAccessModal: document.querySelector("#assistantAccessModal"),
+  assistantCodeInput: document.querySelector("#assistantCodeInput"),
+  newAssistantCode: document.querySelector("#newAssistantCode"),
   toast: document.querySelector("#toast"),
 };
 
@@ -89,6 +95,7 @@ async function init() {
   setupCalendar();
   setupCampForm();
   setupTemplates();
+  setupAssistantAccess();
   setupAdminMode();
   setupGlobalActions();
   applyRoleUI();
@@ -99,9 +106,16 @@ async function init() {
   if (!ready) return;
 
   if (adminCode) await verifyAdminSession({ silent: true });
+  if (!isAdmin && assistantCode) await verifyAssistantSession({ silent: true });
+  if (!canAccessData()) {
+    renderAccessRequired();
+    openAssistantAccessModal();
+    return;
+  }
   await loadCloudData();
   renderAll();
   window.setInterval(async () => {
+    if (!canAccessData()) return;
     const isEditingCamp = els.campForm.classList.contains("open");
     if (!activeTaskId && !isEditingCamp && currentPage !== "templates") {
       await loadCloudData({ silent: true });
@@ -147,8 +161,11 @@ async function setupSupabase() {
 }
 
 function createSupabaseClient(config, publicKey) {
-  const options = adminCode
-    ? { global: { headers: { "x-admin-code": adminCode } } }
+  const headers = {};
+  if (adminCode) headers["x-admin-code"] = adminCode;
+  if (assistantCode) headers["x-assistant-code"] = assistantCode;
+  const options = Object.keys(headers).length
+    ? { global: { headers } }
     : undefined;
   return window.supabase.createClient(config.url, publicKey, options);
 }
@@ -161,6 +178,10 @@ function rebuildSupabaseClient() {
 
 async function loadCloudData({ silent = false } = {}) {
   if (!db) return;
+  if (!canAccessData()) {
+    renderAccessRequired();
+    return;
+  }
   if (!silent) els.saveStatus.textContent = "同步云端中";
 
   const [
@@ -220,6 +241,23 @@ function renderFatal(message) {
   els.calendarDayList.innerHTML = html;
   els.campList.innerHTML = html;
   els.templateList.innerHTML = html;
+}
+
+function renderAccessRequired() {
+  const message = `
+    <div class="empty-state">
+      需要输入助理访问码后才能查看训练营排期。<br />
+      如果你是管理员，可以点右上角进入管理员模式。
+    </div>
+  `;
+  els.saveStatus.textContent = "需要访问码";
+  els.todayTotal.textContent = "0";
+  els.todayDone.textContent = "0";
+  els.todayPending.textContent = "0";
+  els.todayList.innerHTML = message;
+  els.calendarDayList.innerHTML = message;
+  els.campList.innerHTML = message;
+  els.templateList.innerHTML = message;
 }
 
 function renderEmptyShell(message) {
@@ -381,12 +419,78 @@ function closeTemplateForm() {
   els.toggleTemplateForm.setAttribute("aria-expanded", "false");
 }
 
+function setupAssistantAccess() {
+  document.querySelector("#assistantLoginButton").addEventListener("click", loginAssistant);
+  document.querySelector("#assistantAdminLoginButton").addEventListener("click", () => {
+    closeAssistantAccessModal();
+    openAdminModal();
+  });
+  document.querySelector("#closeAssistantAccessModal").addEventListener("click", closeAssistantAccessModal);
+  els.assistantAccessModal.addEventListener("click", (event) => {
+    if (event.target === els.assistantAccessModal) closeAssistantAccessModal();
+  });
+  els.assistantCodeInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") loginAssistant();
+  });
+}
+
+function openAssistantAccessModal() {
+  if (isAdmin || hasAssistantAccess) return;
+  els.assistantAccessModal.hidden = false;
+  window.setTimeout(() => els.assistantCodeInput.focus(), 0);
+}
+
+function closeAssistantAccessModal() {
+  els.assistantAccessModal.hidden = true;
+}
+
+async function loginAssistant() {
+  const code = els.assistantCodeInput.value.trim();
+  if (!code) return showToast("请输入助理访问码");
+  assistantCode = code;
+  rebuildSupabaseClient();
+  const ok = await verifyAssistantSession();
+  if (!ok) {
+    assistantCode = "";
+    window.localStorage.removeItem(ASSISTANT_STORAGE_KEY);
+    rebuildSupabaseClient();
+    return showToast("助理访问码不对");
+  }
+  window.localStorage.setItem(ASSISTANT_STORAGE_KEY, assistantCode);
+  els.assistantCodeInput.value = "";
+  closeAssistantAccessModal();
+  await reloadAndRender("已进入助理模式");
+}
+
+async function verifyAssistantSession({ silent = false } = {}) {
+  if (!assistantCode || !db) {
+    setAssistantAccessState(false);
+    return false;
+  }
+  const { data, error } = await db.rpc("verify_assistant_code");
+  const ok = !error && data === true;
+  if (!ok) {
+    assistantCode = "";
+    window.localStorage.removeItem(ASSISTANT_STORAGE_KEY);
+    rebuildSupabaseClient();
+    if (!silent) showToast("助理访问码已失效");
+  }
+  setAssistantAccessState(ok);
+  return ok;
+}
+
+function setAssistantAccessState(nextHasAccess) {
+  hasAssistantAccess = nextHasAccess;
+  applyRoleUI();
+}
+
 function setupAdminMode() {
   els.adminModeButton.addEventListener("click", openAdminModal);
   document.querySelector("#closeAdminModal").addEventListener("click", closeAdminModal);
   document.querySelector("#adminLoginButton").addEventListener("click", loginAdmin);
   document.querySelector("#adminLogoutButton").addEventListener("click", logoutAdmin);
   document.querySelector("#addAdminButton").addEventListener("click", addAdminCode);
+  document.querySelector("#setAssistantCodeButton").addEventListener("click", setAssistantCode);
   els.adminModal.addEventListener("click", (event) => {
     if (event.target === els.adminModal) closeAdminModal();
   });
@@ -426,6 +530,7 @@ async function loginAdmin() {
   }
   window.localStorage.setItem(ADMIN_STORAGE_KEY, adminCode);
   els.adminCodeInput.value = "";
+  closeAssistantAccessModal();
   closeAdminModal();
   await reloadAndRender("已进入管理员模式");
 }
@@ -464,6 +569,26 @@ async function addAdminCode() {
   showToast("新管理员已添加");
 }
 
+async function setAssistantCode() {
+  if (!requireAdmin()) return;
+  const code = els.newAssistantCode.value.trim();
+  if (!code) return showToast("请输入新的助理访问码");
+  if (code.length < 8) return showToast("访问码建议至少 8 位");
+
+  const { error } = await db.rpc("set_assistant_code", {
+    assistant_name: "助理访问码",
+    assistant_secret: code,
+  });
+  if (error) return showToast(`更新失败：${error.message}`);
+
+  assistantCode = code;
+  hasAssistantAccess = true;
+  window.localStorage.setItem(ASSISTANT_STORAGE_KEY, assistantCode);
+  rebuildSupabaseClient();
+  els.newAssistantCode.value = "";
+  showToast("助理访问码已更新");
+}
+
 function logoutAdmin() {
   adminCode = "";
   window.localStorage.removeItem(ADMIN_STORAGE_KEY);
@@ -471,12 +596,19 @@ function logoutAdmin() {
   setAdminState(false);
   closeAdminModal();
   if (currentPage === "templates") openPage("today");
-  renderAll();
-  showToast("已切回助理模式");
+  if (hasAssistantAccess) {
+    renderAll();
+    showToast("已切回助理模式");
+  } else {
+    renderAccessRequired();
+    openAssistantAccessModal();
+    showToast("已退出管理员模式");
+  }
 }
 
 function setAdminState(nextIsAdmin) {
   isAdmin = nextIsAdmin;
+  if (isAdmin) closeAssistantAccessModal();
   applyRoleUI();
   renderAdminModal();
 }
@@ -484,10 +616,17 @@ function setAdminState(nextIsAdmin) {
 function applyRoleUI() {
   document.body.classList.toggle("is-admin", isAdmin);
   document.body.classList.toggle("is-assistant", !isAdmin);
-  els.roleLabel.textContent = isAdmin ? "管理员模式" : "助理模式";
+  document.body.classList.toggle("is-locked", !canAccessData());
+  els.roleLabel.textContent = isAdmin
+    ? "管理员模式"
+    : hasAssistantAccess
+      ? "助理模式"
+      : "需要访问码";
   els.roleHint.textContent = isAdmin
     ? "可新建、修改、删除和新增管理员"
-    : "可查看、复制话术、勾选已发送";
+    : hasAssistantAccess
+      ? "可查看、复制话术、勾选已发送"
+      : "输入助理访问码后才能查看排期";
   els.adminModeButton.textContent = isAdmin ? "管理设置" : "管理员登录";
   document.querySelectorAll("[data-admin-only]").forEach((element) => {
     element.classList.toggle("admin-only-hidden", !isAdmin);
@@ -501,6 +640,10 @@ function requireAdmin() {
   showToast("请先进入管理员模式");
   openAdminModal();
   return false;
+}
+
+function canAccessData() {
+  return isAdmin || hasAssistantAccess;
 }
 
 function setupGlobalActions() {
@@ -1095,6 +1238,11 @@ async function openWechatGroup(groupName) {
 }
 
 async function reloadAndRender(toastMessage = "") {
+  if (!canAccessData()) {
+    renderAccessRequired();
+    openAssistantAccessModal();
+    return;
+  }
   await loadCloudData({ silent: true });
   renderAll();
   if (toastMessage) showToast(toastMessage);
