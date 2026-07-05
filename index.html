@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>训练营消息排期助手</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <main class="page-stack">
+        <section class="page active" id="page-today" data-page="today">
+          <header class="top-card">
+            <div class="top-line">
+              <span id="todayWeek">今天</span>
+              <span class="save-pill" id="saveStatus">连接云端中</span>
+            </div>
+            <h1 id="todayDate">训练营消息排期</h1>
+            <div class="stat-grid">
+              <div>
+                <strong id="todayTotal">0</strong>
+                <span>今日待发</span>
+              </div>
+              <div>
+                <strong id="todayDone">0</strong>
+                <span>已完成</span>
+              </div>
+              <div>
+                <strong id="todayPending">0</strong>
+                <span>未完成</span>
+              </div>
+            </div>
+          </header>
+
+          <div class="section-title">
+            <h2>今日看板</h2>
+            <button class="text-button" type="button" data-open-page="camps">新建</button>
+          </div>
+          <div class="message-list" id="todayList"></div>
+        </section>
+
+        <section class="page" id="page-calendar" data-page="calendar">
+          <header class="page-header">
+            <div>
+              <p>消息排期</p>
+              <h1>日历</h1>
+            </div>
+            <div class="month-actions">
+              <button class="icon-button" type="button" id="prevMonth" aria-label="上个月">‹</button>
+              <button class="icon-button" type="button" id="nextMonth" aria-label="下个月">›</button>
+            </div>
+          </header>
+
+          <div class="calendar-card">
+            <div class="month-title" id="monthTitle">本月</div>
+            <div class="weekday-row">
+              <span>一</span>
+              <span>二</span>
+              <span>三</span>
+              <span>四</span>
+              <span>五</span>
+              <span>六</span>
+              <span>日</span>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+          </div>
+
+          <div class="type-legend">
+            <span><i class="dot noon"></i>中午</span>
+            <span><i class="dot before"></i>课前</span>
+          </div>
+
+          <div class="section-title compact">
+            <h2 id="selectedDateTitle">当天任务</h2>
+          </div>
+          <div class="message-list" id="calendarDayList"></div>
+        </section>
+
+        <section class="page" id="page-camps" data-page="camps">
+          <header class="page-header">
+            <div>
+              <p>训练营</p>
+              <h1>排期管理</h1>
+            </div>
+            <button class="primary-button small" type="button" id="toggleCampForm">新建</button>
+          </header>
+
+          <form class="camp-form" id="campForm">
+            <div class="form-title">
+              <strong>新建训练营</strong>
+              <button class="text-button" type="button" id="hideCampForm">收起</button>
+            </div>
+            <label>
+              <span>训练营名称</span>
+              <input id="campName" type="text" placeholder="AI 电商设计接单训练营" required />
+            </label>
+            <label>
+              <span>课程主题</span>
+              <input id="topic" type="text" placeholder="AI 电商设计接单实战" required />
+            </label>
+            <label>
+              <span>授课老师 / 嘉宾</span>
+              <input id="teacher" type="text" placeholder="王鑫" />
+            </label>
+            <div class="two-col">
+              <label>
+                <span>开始日期</span>
+                <input id="startDate" type="date" required />
+              </label>
+              <label>
+                <span>结束日期</span>
+                <input id="endDate" type="date" required />
+              </label>
+            </div>
+            <div class="two-col">
+              <label>
+                <span>每天上课时间</span>
+                <input id="classTime" type="time" value="20:00" required />
+              </label>
+              <label>
+                <span>预计课长</span>
+                <input id="durationMinutes" type="number" min="10" step="5" value="90" />
+              </label>
+            </div>
+            <label>
+              <span>直播链接</span>
+              <input id="liveLink" type="url" placeholder="https://..." />
+            </label>
+            <label>
+              <span>课程亮点</span>
+              <textarea id="highlights" rows="3" placeholder="实操拆解、获客、成交、交付、作业点评"></textarea>
+            </label>
+            <label>
+              <span>适合人群</span>
+              <textarea id="audience" rows="3" placeholder="想用 AI 电商设计接单、展示案例、获客成交的同学"></textarea>
+            </label>
+            <label>
+              <span>备注</span>
+              <textarea id="notes" rows="2" placeholder="内部提醒、素材要求、助教注意事项"></textarea>
+            </label>
+
+            <div class="form-block">
+              <div class="block-head">
+                <span>微信群</span>
+                <button class="text-button" type="button" id="addGroup">添加</button>
+              </div>
+              <div class="group-fields" id="groupFields"></div>
+            </div>
+
+            <div class="form-block">
+              <div class="block-head">
+                <span>套用模板</span>
+                <button class="text-button" type="button" id="refreshDrafts">预览话术</button>
+              </div>
+              <div class="template-selects" id="templateSelects"></div>
+              <div class="draft-list" id="draftList"></div>
+            </div>
+
+            <div class="form-block">
+              <div class="block-head">
+                <span>课程排期</span>
+                <button class="text-button" type="button" id="loadImageAgenda">套用云端预设</button>
+              </div>
+              <div class="lesson-fields" id="lessonFields"></div>
+              <button class="secondary-button full" type="button" id="addLesson">添加一节课</button>
+            </div>
+
+            <button class="primary-button full" type="submit">生成消息排期</button>
+          </form>
+
+          <div class="camp-list" id="campList"></div>
+        </section>
+
+        <section class="page" id="page-templates" data-page="templates">
+          <header class="page-header">
+            <div>
+              <p>话术</p>
+              <h1>模板库</h1>
+            </div>
+          </header>
+
+          <form class="template-form" id="templateForm">
+            <input id="templateName" type="text" placeholder="模板名称" required />
+            <select id="templateType" required>
+              <option value="noon">中午预告</option>
+              <option value="before">课前提醒</option>
+              <option value="general">通用模板</option>
+            </select>
+            <textarea id="templateContent" rows="4" placeholder="可用占位：{{训练营名称}} {{第几天}} {{第几节}} {{课程主题}} {{课程内容}} {{上课时间}} {{直播链接}} {{课程亮点}} {{适合人群}}"></textarea>
+            <button class="primary-button full" type="submit">保存模板</button>
+          </form>
+
+          <div class="template-list" id="templateList"></div>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="底部导航">
+        <button class="nav-button active" type="button" data-open-page="today">
+          <span class="nav-icon board"></span>
+          <b>今日</b>
+        </button>
+        <button class="nav-button" type="button" data-open-page="calendar">
+          <span class="nav-icon calendar"></span>
+          <b>日历</b>
+        </button>
+        <button class="nav-button" type="button" data-open-page="camps">
+          <span class="nav-icon camp"></span>
+          <b>训练营</b>
+        </button>
+        <button class="nav-button" type="button" data-open-page="templates">
+          <span class="nav-icon template"></span>
+          <b>模板</b>
+        </button>
+      </nav>
+    </div>
+
+    <section class="detail-view" id="detailView" aria-label="群发送详情" hidden>
+      <header class="detail-header">
+        <button class="icon-button" type="button" id="closeDetail" aria-label="返回">‹</button>
+        <div>
+          <p id="detailType">发送任务</p>
+          <h1 id="detailTitle">群发送详情</h1>
+        </div>
+      </header>
+      <div class="detail-content" id="detailContent"></div>
+      <footer class="detail-footer">
+        <span id="detailProgress">已发送 0 / 共 0 个群</span>
+        <button class="primary-button" type="button" id="detailCopy">复制话术</button>
+      </footer>
+    </section>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
