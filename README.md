@@ -14,8 +14,9 @@
 2. 打开 SQL Editor。
 3. 先执行 `supabase/schema.sql`。
 4. 再执行 `supabase/seed.sql`。
-5. 在 Supabase 项目设置里复制 Project URL 和 publishable key / anon public key。
-6. 打开 `config.js`，替换：
+5. 再执行 `supabase/admin-mode.sql`，开启管理员 / 助理模式。
+6. 在 Supabase 项目设置里复制 Project URL 和 publishable key / anon public key。
+7. 打开 `config.js`，替换：
 
 ```js
 window.TRAINING_CAMP_SUPABASE = {
@@ -24,7 +25,7 @@ window.TRAINING_CAMP_SUPABASE = {
 };
 ```
 
-第一版为了免登录，SQL 里给匿名用户开放了读写权限。任何拿到链接的人都能改数据，后续要多人协作和权限控制时，再加登录和 RLS 限制。
+管理员模式使用轻量口令 + Supabase RLS 控制。助理无需登录，可以查看、复制话术、勾选已发送；新建训练营、修改模板、删除排期、新增管理员需要管理员口令。
 
 ## 免费部署
 

@@ -14,12 +14,16 @@ const SUPABASE_TABLES = {
   presetItems: "lesson_preset_items",
 };
 
+const ADMIN_STORAGE_KEY = "training-camp-admin-code";
+
 let db = null;
 let currentPage = "today";
 let calendarCursor = startOfMonth(new Date());
 let selectedCalendarDate = toDateInput(new Date());
 let activeTaskId = null;
 let state = emptyState();
+let adminCode = window.localStorage.getItem(ADMIN_STORAGE_KEY) || "";
+let isAdmin = false;
 
 const els = {
   todayWeek: document.querySelector("#todayWeek"),
@@ -46,6 +50,15 @@ const els = {
   detailTitle: document.querySelector("#detailTitle"),
   detailContent: document.querySelector("#detailContent"),
   detailProgress: document.querySelector("#detailProgress"),
+  roleLabel: document.querySelector("#roleLabel"),
+  roleHint: document.querySelector("#roleHint"),
+  adminModeButton: document.querySelector("#adminModeButton"),
+  adminModal: document.querySelector("#adminModal"),
+  adminLoginPanel: document.querySelector("#adminLoginPanel"),
+  adminManagePanel: document.querySelector("#adminManagePanel"),
+  adminCodeInput: document.querySelector("#adminCodeInput"),
+  newAdminName: document.querySelector("#newAdminName"),
+  newAdminCode: document.querySelector("#newAdminCode"),
   toast: document.querySelector("#toast"),
 };
 
@@ -56,13 +69,16 @@ async function init() {
   setupCalendar();
   setupCampForm();
   setupTemplates();
+  setupAdminMode();
   setupGlobalActions();
+  applyRoleUI();
   renderTodayHeader();
   renderEmptyShell("正在连接 Supabase 云端数据...");
 
   const ready = await setupSupabase();
   if (!ready) return;
 
+  if (adminCode) await verifyAdminSession({ silent: true });
   await loadCloudData();
   renderAll();
   window.setInterval(async () => {
@@ -100,7 +116,7 @@ async function setupSupabase() {
     if (!window.supabase?.createClient) {
       throw new Error("Supabase SDK 未加载，请检查网络或 CDN");
     }
-    db = window.supabase.createClient(config.url, publicKey);
+    db = createSupabaseClient(config, publicKey);
     els.saveStatus.textContent = "云端已连接";
     return true;
   } catch (error) {
@@ -108,6 +124,19 @@ async function setupSupabase() {
     renderFatal(`Supabase 连接失败：${error.message}`);
     return false;
   }
+}
+
+function createSupabaseClient(config, publicKey) {
+  const options = adminCode
+    ? { global: { headers: { "x-admin-code": adminCode } } }
+    : undefined;
+  return window.supabase.createClient(config.url, publicKey, options);
+}
+
+function rebuildSupabaseClient() {
+  const config = window.TRAINING_CAMP_SUPABASE;
+  const publicKey = config?.publishableKey || config?.anonKey;
+  db = createSupabaseClient(config, publicKey);
 }
 
 async function loadCloudData({ silent = false } = {}) {
@@ -187,15 +216,23 @@ function setupNavigation() {
 }
 
 function openPage(page) {
+  if (page === "templates" && !isAdmin) {
+    requireAdmin();
+    return;
+  }
   currentPage = page;
-  document.querySelectorAll(".page").forEach((panel) => {
-    panel.classList.toggle("active", panel.dataset.page === page);
-  });
-  document.querySelectorAll(".nav-button").forEach((button) => {
-    button.classList.toggle("active", button.dataset.openPage === page);
-  });
+  syncActivePage();
   renderAll();
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function syncActivePage() {
+  document.querySelectorAll(".page").forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.page === currentPage);
+  });
+  document.querySelectorAll(".nav-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.openPage === currentPage);
+  });
 }
 
 function setupCalendar() {
@@ -219,6 +256,7 @@ function setupCampForm() {
   addLessonField({ day_number: 1, kind: "正课", title: "", detail: "", sort_order: 1 });
 
   document.querySelector("#toggleCampForm").addEventListener("click", () => {
+    if (!requireAdmin()) return;
     els.campForm.classList.add("open");
     renderTemplateSelects();
     renderDraftPreview();
@@ -269,6 +307,7 @@ function setupCampForm() {
 function setupTemplates() {
   els.templateForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!requireAdmin()) return;
     if (!db) return showToast("请先配置 Supabase");
     const name = document.querySelector("#templateName").value.trim();
     const type = document.querySelector("#templateType").value;
@@ -291,18 +330,143 @@ function setupTemplates() {
     const deleteButton = event.target.closest("[data-delete-template]");
 
     if (editButton) {
+      if (!requireAdmin()) return;
       editButton.closest(".template-card").classList.toggle("editing");
       return;
     }
     if (saveButton) {
+      if (!requireAdmin()) return;
       await saveTemplate(saveButton.dataset.saveTemplate);
       return;
     }
     if (deleteButton) {
+      if (!requireAdmin()) return;
       await cloudDelete(SUPABASE_TABLES.templates, deleteButton.dataset.deleteTemplate);
       await reloadAndRender("模板已删除");
     }
   });
+}
+
+function setupAdminMode() {
+  els.adminModeButton.addEventListener("click", openAdminModal);
+  document.querySelector("#closeAdminModal").addEventListener("click", closeAdminModal);
+  document.querySelector("#adminLoginButton").addEventListener("click", loginAdmin);
+  document.querySelector("#adminLogoutButton").addEventListener("click", logoutAdmin);
+  document.querySelector("#addAdminButton").addEventListener("click", addAdminCode);
+  els.adminModal.addEventListener("click", (event) => {
+    if (event.target === els.adminModal) closeAdminModal();
+  });
+  els.adminCodeInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") loginAdmin();
+  });
+}
+
+function openAdminModal() {
+  els.adminModal.hidden = false;
+  renderAdminModal();
+  if (!isAdmin) {
+    window.setTimeout(() => els.adminCodeInput.focus(), 0);
+  }
+}
+
+function closeAdminModal() {
+  els.adminModal.hidden = true;
+}
+
+function renderAdminModal() {
+  els.adminLoginPanel.hidden = isAdmin;
+  els.adminManagePanel.hidden = !isAdmin;
+}
+
+async function loginAdmin() {
+  const code = els.adminCodeInput.value.trim();
+  if (!code) return showToast("请输入管理员口令");
+  adminCode = code;
+  rebuildSupabaseClient();
+  const ok = await verifyAdminSession();
+  if (!ok) {
+    adminCode = "";
+    window.localStorage.removeItem(ADMIN_STORAGE_KEY);
+    rebuildSupabaseClient();
+    return showToast("管理员口令不对");
+  }
+  window.localStorage.setItem(ADMIN_STORAGE_KEY, adminCode);
+  els.adminCodeInput.value = "";
+  closeAdminModal();
+  await reloadAndRender("已进入管理员模式");
+}
+
+async function verifyAdminSession({ silent = false } = {}) {
+  if (!adminCode || !db) {
+    setAdminState(false);
+    return false;
+  }
+  const { data, error } = await db.rpc("verify_admin_code");
+  const ok = !error && data === true;
+  if (!ok) {
+    adminCode = "";
+    window.localStorage.removeItem(ADMIN_STORAGE_KEY);
+    rebuildSupabaseClient();
+    if (!silent) showToast("管理员口令已失效");
+  }
+  setAdminState(ok);
+  return ok;
+}
+
+async function addAdminCode() {
+  if (!requireAdmin()) return;
+  const name = els.newAdminName.value.trim();
+  const code = els.newAdminCode.value.trim();
+  if (!name || !code) return showToast("名称和口令都要填");
+  if (code.length < 8) return showToast("口令建议至少 8 位");
+
+  const { error } = await db.rpc("add_admin_code", {
+    admin_name: name,
+    admin_secret: code,
+  });
+  if (error) return showToast(`新增失败：${error.message}`);
+  els.newAdminName.value = "";
+  els.newAdminCode.value = "";
+  showToast("新管理员已添加");
+}
+
+function logoutAdmin() {
+  adminCode = "";
+  window.localStorage.removeItem(ADMIN_STORAGE_KEY);
+  rebuildSupabaseClient();
+  setAdminState(false);
+  closeAdminModal();
+  if (currentPage === "templates") openPage("today");
+  renderAll();
+  showToast("已切回助理模式");
+}
+
+function setAdminState(nextIsAdmin) {
+  isAdmin = nextIsAdmin;
+  applyRoleUI();
+  renderAdminModal();
+}
+
+function applyRoleUI() {
+  document.body.classList.toggle("is-admin", isAdmin);
+  document.body.classList.toggle("is-assistant", !isAdmin);
+  els.roleLabel.textContent = isAdmin ? "管理员模式" : "助理模式";
+  els.roleHint.textContent = isAdmin
+    ? "可新建、修改、删除和新增管理员"
+    : "可查看、复制话术、勾选已发送";
+  els.adminModeButton.textContent = isAdmin ? "管理设置" : "管理员登录";
+  document.querySelectorAll("[data-admin-only]").forEach((element) => {
+    element.classList.toggle("admin-only-hidden", !isAdmin);
+  });
+  if (!isAdmin && currentPage === "templates") currentPage = "today";
+  syncActivePage();
+}
+
+function requireAdmin() {
+  if (isAdmin) return true;
+  showToast("请先进入管理员模式");
+  openAdminModal();
+  return false;
 }
 
 function setupGlobalActions() {
@@ -330,6 +494,7 @@ function setupGlobalActions() {
       return;
     }
     if (saveTimeButton) {
+      if (!requireAdmin()) return;
       await saveDetailEdits(saveTimeButton.dataset.saveDetailTime);
       return;
     }
@@ -338,6 +503,7 @@ function setupGlobalActions() {
       return;
     }
     if (deleteCampButton) {
+      if (!requireAdmin()) return;
       await cloudDelete(SUPABASE_TABLES.camps, deleteCampButton.dataset.deleteCamp);
       await reloadAndRender("训练营已删除");
       return;
@@ -488,6 +654,7 @@ function getLessonFormData() {
 
 async function createCampFromForm(event) {
   event.preventDefault();
+  if (!requireAdmin()) return;
   if (!db) return showToast("请先配置 Supabase");
   const camp = getCampFormData();
   if (!camp.name || !camp.topic || !camp.start_date || !camp.end_date || !camp.class_time) {
@@ -582,6 +749,7 @@ function renderAll() {
   renderTemplates();
   renderTemplateSelects();
   if (activeTaskId) renderTaskDetail(activeTaskId);
+  applyRoleUI();
 }
 
 function renderTodayHeader() {
@@ -694,7 +862,7 @@ function renderCamps() {
             <div><span>任务进度</span><b>${done}/${tasks.length}</b></div>
             <div><span>完成率</span><b>${progress}%</b></div>
           </div>
-          <div class="camp-actions">
+          <div class="camp-actions ${isAdmin ? "" : "admin-only-hidden"}">
             <button class="danger-button" type="button" data-delete-camp="${camp.id}">删除训练营</button>
           </div>
         </article>
@@ -704,6 +872,17 @@ function renderCamps() {
 }
 
 function renderTemplates() {
+  if (!isAdmin) {
+    els.templateForm.classList.add("admin-only-hidden");
+    els.templateList.innerHTML = `
+      <div class="empty-state">
+        模板库需要管理员模式。<br />
+        助理日常只需要在「今日」复制话术和勾选已发送。
+      </div>
+    `;
+    return;
+  }
+  els.templateForm.classList.remove("admin-only-hidden");
   els.templateList.innerHTML = state.templates.length
     ? state.templates.map((template) => `
       <article class="template-card">
@@ -751,24 +930,37 @@ function renderTaskDetail(taskId) {
   const statuses = statusesForTask(task.id);
   els.detailType.textContent = task.type_label;
   els.detailTitle.textContent = camp?.name || "群发送详情";
+  const detailEditor = isAdmin
+    ? `
+      <label>
+        <span>发送时间</span>
+        <input type="datetime-local" value="${escapeHTML(task.send_at.slice(0, 16))}" data-detail-time="${task.id}" />
+      </label>
+      <button class="secondary-button" type="button" data-save-detail-time="${task.id}">保存时间和话术</button>
+    `
+    : `
+      <div class="readonly-time">
+        <span>发送时间</span>
+        <b>${escapeHTML(formatClock(task.send_at))}</b>
+      </div>
+    `;
+  const messageEditor = isAdmin
+    ? `<textarea rows="8" data-detail-message="${task.id}">${escapeHTML(task.message)}</textarea>`
+    : `<div class="readonly-message">${escapeHTML(task.message).replace(/\n/g, "<br>")}</div>`;
   els.detailContent.innerHTML = `
     <div class="detail-time">
       <div class="detail-summary">
         <strong>${escapeHTML(`第${task.lesson_index || lesson?.sort_order || 1}节 · ${lesson?.kind || "课程"} · ${lesson?.title || camp?.topic || "-"}`)}</strong>
         <span>老师：${escapeHTML(camp?.teacher || "-")} · 上课 ${escapeHTML(formatClassTime(task))}</span>
       </div>
-      <label>
-        <span>发送时间</span>
-        <input type="datetime-local" value="${escapeHTML(task.send_at.slice(0, 16))}" data-detail-time="${task.id}" />
-      </label>
-      <button class="secondary-button" type="button" data-save-detail-time="${task.id}">保存时间和话术</button>
+      ${detailEditor}
     </div>
     <div class="detail-message">
       <div class="detail-message-head">
         <strong>完整话术</strong>
         <button class="secondary-button mini" type="button" data-copy-task="${task.id}">一键复制</button>
       </div>
-      <textarea rows="8" data-detail-message="${task.id}">${escapeHTML(task.message)}</textarea>
+      ${messageEditor}
     </div>
     <div class="group-list-panel">
       ${statuses.map((status) => `
@@ -799,7 +991,6 @@ async function toggleGroup(statusId) {
     sent: nextSent,
     sent_at: nextSent ? new Date().toISOString() : null,
   });
-  await updateTaskCompletion(status.task_id);
   await reloadAndRender();
 }
 
@@ -813,15 +1004,11 @@ async function markAllGroups(taskId) {
       })
     )
   );
-  await cloudUpdate(SUPABASE_TABLES.tasks, taskId, { completed_at: new Date().toISOString() });
   await reloadAndRender("已全部标记");
 }
 
 async function updateTaskCompletion(taskId) {
-  const freshStatuses = await db.from(SUPABASE_TABLES.statuses).select("*").eq("task_id", taskId);
-  if (freshStatuses.error) throwAndRender(freshStatuses.error);
-  const allSent = freshStatuses.data.length > 0 && freshStatuses.data.every((item) => item.sent);
-  await cloudUpdate(SUPABASE_TABLES.tasks, taskId, { completed_at: allSent ? new Date().toISOString() : null });
+  return taskId;
 }
 
 async function saveTemplate(templateId) {
@@ -835,6 +1022,7 @@ async function saveTemplate(templateId) {
 async function copyTaskMessage(task) {
   const textarea = document.querySelector(`[data-detail-message="${task.id}"]`);
   if (textarea && textarea.value.trim() !== task.message) {
+    if (!requireAdmin()) return;
     task.message = textarea.value.trim();
     await cloudUpdate(SUPABASE_TABLES.tasks, task.id, { message: task.message });
   }

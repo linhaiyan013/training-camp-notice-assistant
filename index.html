@@ -8,6 +8,13 @@
   </head>
   <body>
     <div class="app">
+      <header class="mode-bar">
+        <div>
+          <strong id="roleLabel">助理模式</strong>
+          <span id="roleHint">可查看、复制话术、勾选已发送</span>
+        </div>
+        <button class="secondary-button mini" type="button" id="adminModeButton">管理员登录</button>
+      </header>
       <main class="page-stack">
         <section class="page active" id="page-today" data-page="today">
           <header class="top-card">
@@ -34,7 +41,7 @@
 
           <div class="section-title">
             <h2>今日看板</h2>
-            <button class="text-button" type="button" data-open-page="camps">新建</button>
+            <button class="text-button" type="button" data-open-page="camps" data-admin-only>新建</button>
           </div>
           <div class="message-list" id="todayList"></div>
         </section>
@@ -82,10 +89,10 @@
               <p>训练营</p>
               <h1>排期管理</h1>
             </div>
-            <button class="primary-button small" type="button" id="toggleCampForm">新建</button>
+            <button class="primary-button small" type="button" id="toggleCampForm" data-admin-only>新建</button>
           </header>
 
-          <form class="camp-form" id="campForm">
+          <form class="camp-form" id="campForm" data-admin-only>
             <div class="form-title">
               <strong>新建训练营</strong>
               <button class="text-button" type="button" id="hideCampForm">收起</button>
@@ -207,7 +214,7 @@
           <span class="nav-icon camp"></span>
           <b>训练营</b>
         </button>
-        <button class="nav-button" type="button" data-open-page="templates">
+        <button class="nav-button" type="button" data-open-page="templates" data-admin-only>
           <span class="nav-icon template"></span>
           <b>模板</b>
         </button>
@@ -227,6 +234,36 @@
         <span id="detailProgress">已发送 0 / 共 0 个群</span>
         <button class="primary-button" type="button" id="detailCopy">复制话术</button>
       </footer>
+    </section>
+
+    <section class="admin-modal" id="adminModal" hidden aria-label="管理员模式">
+      <div class="admin-panel">
+        <div class="form-title">
+          <strong>管理员模式</strong>
+          <button class="text-button" type="button" id="closeAdminModal">关闭</button>
+        </div>
+        <div id="adminLoginPanel">
+          <p class="helper-text">输入管理员口令后，才能新建训练营、修改模板、删除排期。</p>
+          <label>
+            <span>管理员口令</span>
+            <input id="adminCodeInput" type="password" inputmode="text" autocomplete="current-password" placeholder="输入管理员口令" />
+          </label>
+          <button class="primary-button full" type="button" id="adminLoginButton">进入管理员模式</button>
+        </div>
+        <div id="adminManagePanel" hidden>
+          <p class="helper-text">当前已进入管理员模式。新增管理员时，给对方设置一个新口令即可。</p>
+          <label>
+            <span>新管理员名称</span>
+            <input id="newAdminName" type="text" placeholder="例如：助教小王" />
+          </label>
+          <label>
+            <span>新管理员口令</span>
+            <input id="newAdminCode" type="text" placeholder="建议 8 位以上，数字+字母" />
+          </label>
+          <button class="primary-button full" type="button" id="addAdminButton">新增管理员</button>
+          <button class="danger-button full" type="button" id="adminLogoutButton">退出管理员模式</button>
+        </div>
+      </div>
     </section>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>

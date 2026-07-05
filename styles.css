@@ -66,6 +66,40 @@ p {
   background: var(--bg);
 }
 
+.mode-bar {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+  background: rgba(255, 241, 247, 0.94);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+}
+
+.mode-bar div {
+  min-width: 0;
+}
+
+.mode-bar strong,
+.mode-bar span {
+  display: block;
+}
+
+.mode-bar strong {
+  font-size: 14px;
+}
+
+.mode-bar span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .page-stack {
   padding: 14px 14px calc(86px + env(safe-area-inset-bottom));
 }
@@ -210,6 +244,10 @@ p {
   width: 100%;
 }
 
+.danger-button.full {
+  width: 100%;
+}
+
 .secondary-button {
   padding: 0 14px;
   color: var(--accent);
@@ -234,6 +272,10 @@ p {
   padding: 0 8px;
   color: var(--accent);
   background: transparent;
+}
+
+.admin-only-hidden {
+  display: none !important;
 }
 
 .icon-button {
@@ -419,6 +461,12 @@ p {
   background: rgba(255, 255, 255, 0.72);
   border: 1px dashed var(--line);
   border-radius: 16px;
+}
+
+.helper-text {
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 13px;
 }
 
 .calendar-card {
@@ -940,6 +988,38 @@ select:focus {
   min-height: 180px;
 }
 
+.readonly-time {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  background: #fbfcfb;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.readonly-time span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.readonly-time b {
+  color: var(--accent);
+}
+
+.readonly-message {
+  margin-top: 9px;
+  padding: 12px;
+  color: #4a2a39;
+  background: #fbfcfb;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
 .detail-message-head {
   display: flex;
   align-items: center;
@@ -1008,6 +1088,36 @@ select:focus {
 
 .detail-footer span {
   font-weight: 900;
+}
+
+.admin-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: end center;
+  padding: 18px 14px calc(18px + env(safe-area-inset-bottom));
+  background: rgba(55, 32, 43, 0.34);
+}
+
+.admin-modal[hidden] {
+  display: none;
+}
+
+.admin-panel {
+  display: grid;
+  gap: 13px;
+  width: min(100%, 492px);
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(85, 22, 51, 0.24);
+}
+
+.admin-panel > div:not(.form-title) {
+  display: grid;
+  gap: 12px;
 }
 
 .toast {
