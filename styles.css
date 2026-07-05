@@ -813,7 +813,7 @@ select:focus {
   left: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   width: min(100%, 520px);
   margin: 0 auto;
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
@@ -821,6 +821,10 @@ select:focus {
   border-top: 1px solid var(--line);
   box-shadow: 0 -10px 30px rgba(154, 38, 88, 0.1);
   backdrop-filter: blur(14px);
+}
+
+body.is-admin .bottom-nav {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .nav-button {
@@ -833,6 +837,14 @@ select:focus {
   border: 0;
   border-radius: 14px;
   font-size: 12px;
+}
+
+.nav-button:focus {
+  outline: none;
+}
+
+.nav-button:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(199, 21, 117, 0.28);
 }
 
 .nav-button.active {
