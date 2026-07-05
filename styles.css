@@ -584,7 +584,7 @@ p {
 }
 
 .camp-form.open,
-.template-form {
+.template-form.open {
   display: grid;
 }
 
@@ -1036,7 +1036,7 @@ select:focus {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
-  align-items: center;
+  align-items: start;
   min-height: 48px;
   padding: 10px 12px;
   background: var(--panel-2);
@@ -1044,7 +1044,13 @@ select:focus {
   border-radius: 13px;
 }
 
-.group-row span:first-child {
+.group-info {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.group-info span:first-child {
   overflow-wrap: anywhere;
   font-weight: 800;
 }
@@ -1055,6 +1061,21 @@ select:focus {
   border: 0;
   border-radius: 999px;
   font-weight: 800;
+}
+
+.group-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.group-tools button {
+  min-height: 28px;
+  padding: 0 9px;
+  color: var(--accent);
+  background: #fff7fb;
+  border: 1px solid var(--line);
+  font-size: 12px;
 }
 
 .group-row .sent {

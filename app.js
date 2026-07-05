@@ -3,6 +3,24 @@ const TASK_TYPES = [
   { id: "before", label: "课前提醒", short: "课前" },
 ];
 
+const TEMPLATE_TYPES = [
+  { id: "daily", label: "每日课程预告" },
+  { id: "noon", label: "中午预告" },
+  { id: "before", label: "课前提醒" },
+  { id: "replay", label: "回放提醒" },
+  { id: "homework", label: "作业提醒" },
+  { id: "opening", label: "开营预告" },
+  { id: "start", label: "正式开营提醒" },
+  { id: "closing", label: "结营提醒" },
+  { id: "conversion", label: "转化提醒" },
+  { id: "general", label: "通用模板" },
+];
+
+const TEMPLATE_USAGE_TYPES = {
+  noon: ["noon", "daily", "opening"],
+  before: ["before", "start"],
+};
+
 const SUPABASE_TABLES = {
   camps: "training_camps",
   groups: "camp_groups",
@@ -45,6 +63,8 @@ const els = {
   campList: document.querySelector("#campList"),
   templateForm: document.querySelector("#templateForm"),
   templateList: document.querySelector("#templateList"),
+  toggleTemplateForm: document.querySelector("#toggleTemplateForm"),
+  hideTemplateForm: document.querySelector("#hideTemplateForm"),
   detailView: document.querySelector("#detailView"),
   detailType: document.querySelector("#detailType"),
   detailTitle: document.querySelector("#detailTitle"),
@@ -305,6 +325,14 @@ function setupCampForm() {
 }
 
 function setupTemplates() {
+  document.querySelector("#templateType").innerHTML = templateTypeOptions("daily");
+  els.toggleTemplateForm.addEventListener("click", () => {
+    if (!requireAdmin()) return;
+    els.templateForm.classList.add("open");
+    els.toggleTemplateForm.setAttribute("aria-expanded", "true");
+    window.setTimeout(() => document.querySelector("#templateName").focus(), 0);
+  });
+  els.hideTemplateForm.addEventListener("click", closeTemplateForm);
   els.templateForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!requireAdmin()) return;
@@ -321,6 +349,7 @@ function setupTemplates() {
       sort_order: state.templates.length + 1,
     });
     els.templateForm.reset();
+    closeTemplateForm();
     await reloadAndRender("模板已保存");
   });
 
@@ -345,6 +374,11 @@ function setupTemplates() {
       await reloadAndRender("模板已删除");
     }
   });
+}
+
+function closeTemplateForm() {
+  els.templateForm.classList.remove("open");
+  els.toggleTemplateForm.setAttribute("aria-expanded", "false");
 }
 
 function setupAdminMode() {
@@ -477,11 +511,21 @@ function setupGlobalActions() {
     const dayButton = event.target.closest("[data-date]");
     const saveTimeButton = event.target.closest("[data-save-detail-time]");
     const toggleGroupButton = event.target.closest("[data-toggle-group]");
+    const copyGroupButton = event.target.closest("[data-copy-group-name]");
+    const openWechatButton = event.target.closest("[data-open-wechat-group]");
     const deleteCampButton = event.target.closest("[data-delete-camp]");
 
     if (copyButton) {
       const task = getTask(copyButton.dataset.copyTask);
       if (task) await copyTaskMessage(task);
+      return;
+    }
+    if (copyGroupButton) {
+      await copyGroupName(copyGroupButton.dataset.copyGroupName);
+      return;
+    }
+    if (openWechatButton) {
+      await openWechatGroup(openWechatButton.dataset.openWechatGroup);
       return;
     }
     if (allButton) {
@@ -873,6 +917,7 @@ function renderCamps() {
 
 function renderTemplates() {
   if (!isAdmin) {
+    closeTemplateForm();
     els.templateForm.classList.add("admin-only-hidden");
     els.templateList.innerHTML = `
       <div class="empty-state">
@@ -965,7 +1010,13 @@ function renderTaskDetail(taskId) {
     <div class="group-list-panel">
       ${statuses.map((status) => `
         <div class="group-row">
-          <span>${escapeHTML(status.group_name)}</span>
+          <div class="group-info">
+            <span>${escapeHTML(status.group_name)}</span>
+            <div class="group-tools">
+              <button type="button" data-copy-group-name="${escapeHTML(status.group_name)}">复制群名</button>
+              <button type="button" data-open-wechat-group="${escapeHTML(status.group_name)}">打开微信</button>
+            </div>
+          </div>
           <button class="${status.sent ? "sent" : "unsent"}" type="button" data-toggle-group data-status-id="${status.id}">
             ${status.sent ? "已发送" : "未发送"}
           </button>
@@ -1028,6 +1079,19 @@ async function copyTaskMessage(task) {
   }
   await copyText(task.message || "");
   showToast("话术已复制");
+}
+
+async function copyGroupName(groupName) {
+  await copyText(groupName || "");
+  showToast("群名已复制");
+}
+
+async function openWechatGroup(groupName) {
+  await copyText(groupName || "");
+  showToast("群名已复制，正在打开微信");
+  window.setTimeout(() => {
+    window.location.href = "weixin://";
+  }, 180);
 }
 
 async function reloadAndRender(toastMessage = "") {
@@ -1128,22 +1192,19 @@ function getLesson(lessonId) {
 }
 
 function templatesForType(type) {
-  const exact = state.templates.filter((template) => template.type === type);
+  const usableTypes = TEMPLATE_USAGE_TYPES[type] || [type];
+  const exact = state.templates.filter((template) => usableTypes.includes(template.type));
   const general = state.templates.filter((template) => template.type === "general");
   return [...exact, ...general];
 }
 
 function typeLabel(type) {
-  return TASK_TYPES.find((item) => item.id === type)?.label || "通用模板";
+  return TEMPLATE_TYPES.find((item) => item.id === type)?.label || "通用模板";
 }
 
 function templateTypeOptions(selected) {
-  return [
-    ["noon", "中午预告"],
-    ["before", "课前提醒"],
-    ["general", "通用模板"],
-  ]
-    .map(([value, label]) => `<option value="${value}" ${value === selected ? "selected" : ""}>${label}</option>`)
+  return TEMPLATE_TYPES
+    .map((type) => `<option value="${type.id}" ${type.id === selected ? "selected" : ""}>${type.label}</option>`)
     .join("");
 }
 

@@ -15,8 +15,9 @@
 3. 先执行 `supabase/schema.sql`。
 4. 再执行 `supabase/seed.sql`。
 5. 再执行 `supabase/admin-mode.sql`，开启管理员 / 助理模式。
-6. 在 Supabase 项目设置里复制 Project URL 和 publishable key / anon public key。
-7. 打开 `config.js`，替换：
+6. 再执行 `supabase/template-types.sql`，开启完整模板类型。
+7. 在 Supabase 项目设置里复制 Project URL 和 publishable key / anon public key。
+8. 打开 `config.js`，替换：
 
 ```js
 window.TRAINING_CAMP_SUPABASE = {

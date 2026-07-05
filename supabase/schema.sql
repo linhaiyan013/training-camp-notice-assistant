@@ -65,7 +65,18 @@ create table if not exists public.task_group_statuses (
 create table if not exists public.message_templates (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  type text not null check (type in ('noon', 'before', 'general')),
+  type text not null check (type in (
+    'daily',
+    'noon',
+    'before',
+    'replay',
+    'homework',
+    'opening',
+    'start',
+    'closing',
+    'conversion',
+    'general'
+  )),
   content text not null,
   sort_order integer not null default 1,
   created_at timestamptz not null default now(),

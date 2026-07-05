@@ -184,15 +184,16 @@
               <p>话术</p>
               <h1>模板库</h1>
             </div>
+            <button class="primary-button small" type="button" id="toggleTemplateForm" data-admin-only>新增模板</button>
           </header>
 
           <form class="template-form" id="templateForm">
+            <div class="form-title">
+              <strong>新增模板</strong>
+              <button class="text-button" type="button" id="hideTemplateForm">收起</button>
+            </div>
             <input id="templateName" type="text" placeholder="模板名称" required />
-            <select id="templateType" required>
-              <option value="noon">中午预告</option>
-              <option value="before">课前提醒</option>
-              <option value="general">通用模板</option>
-            </select>
+            <select id="templateType" required></select>
             <textarea id="templateContent" rows="4" placeholder="可用占位：{{训练营名称}} {{第几天}} {{第几节}} {{课程主题}} {{课程内容}} {{上课时间}} {{直播链接}} {{课程亮点}} {{适合人群}}"></textarea>
             <button class="primary-button full" type="submit">保存模板</button>
           </form>
