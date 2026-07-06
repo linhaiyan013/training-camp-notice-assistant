@@ -45,6 +45,7 @@ let state = emptyState();
 let adminCode = window.localStorage.getItem(ADMIN_STORAGE_KEY) || "";
 let assistantCode = window.localStorage.getItem(ASSISTANT_STORAGE_KEY) || "";
 let preferredRole = window.localStorage.getItem(ROLE_STORAGE_KEY) || "";
+let loginMode = preferredRole === "admin" ? "admin" : "assistant";
 let isAdmin = false;
 let hasAssistantAccess = false;
 
@@ -92,6 +93,10 @@ const els = {
   primaryAdminCodeStatus: document.querySelector("#primaryAdminCodeStatus"),
   setPrimaryAdminCodeButton: document.querySelector("#setPrimaryAdminCodeButton"),
   assistantAccessModal: document.querySelector("#assistantAccessModal"),
+  loginModeTitle: document.querySelector("#loginModeTitle"),
+  loginModeHint: document.querySelector("#loginModeHint"),
+  loginCodeLabel: document.querySelector("#loginCodeLabel"),
+  loginModeButtons: document.querySelectorAll("[data-login-mode]"),
   assistantCodeInput: document.querySelector("#assistantCodeInput"),
   assistantLoginButton: document.querySelector("#assistantLoginButton"),
   assistantLoginStatus: document.querySelector("#assistantLoginStatus"),
@@ -122,7 +127,7 @@ async function init() {
   await restoreStoredSession(wantsAdminEntry);
   if (wantsAdminEntry && !isAdmin) {
     renderAccessRequired();
-    openAdminModal();
+    openAssistantAccessModal("admin");
     return;
   }
   if (!canAccessData()) {
@@ -265,8 +270,8 @@ function renderFatal(message) {
 function renderAccessRequired() {
   const message = `
     <div class="empty-state">
-      需要输入助理访问码后才能查看训练营排期。<br />
-      如果你是管理员，可以点右上角进入管理员模式。
+      请选择进入助理模式或管理员模式。<br />
+      输入对应密码后，就能进入对应的工作界面。
     </div>
   `;
   els.saveStatus.textContent = "需要访问码";
@@ -439,22 +444,23 @@ function closeTemplateForm() {
 }
 
 function setupAssistantAccess() {
-  document.querySelector("#assistantLoginButton").addEventListener("click", loginAssistant);
-  document.querySelector("#assistantAdminLoginButton").addEventListener("click", () => {
-    closeAssistantAccessModal();
-    openAdminModal();
+  els.loginModeButtons.forEach((button) => {
+    button.addEventListener("click", () => setLoginMode(button.dataset.loginMode));
   });
+  document.querySelector("#assistantLoginButton").addEventListener("click", loginSelectedMode);
   document.querySelector("#closeAssistantAccessModal").addEventListener("click", closeAssistantAccessModal);
   els.assistantAccessModal.addEventListener("click", (event) => {
     if (event.target === els.assistantAccessModal) closeAssistantAccessModal();
   });
   els.assistantCodeInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") loginAssistant();
+    if (event.key === "Enter") loginSelectedMode();
   });
 }
 
-function openAssistantAccessModal() {
-  if (isAdmin || hasAssistantAccess) return;
+function openAssistantAccessModal(mode = "") {
+  const nextMode = mode || getDefaultLoginMode();
+  if (isAdmin || (hasAssistantAccess && nextMode !== "admin")) return;
+  setLoginMode(nextMode);
   setInlineStatus(els.assistantLoginStatus);
   els.assistantAccessModal.hidden = false;
   window.setTimeout(() => els.assistantCodeInput.focus(), 0);
@@ -467,6 +473,26 @@ function closeAssistantAccessModal() {
 function isAdminEntryRequested() {
   const params = new URLSearchParams(window.location.search);
   return params.get("admin") === "1" || window.location.hash === "#admin";
+}
+
+function getDefaultLoginMode() {
+  return preferredRole === "admin" ? "admin" : "assistant";
+}
+
+function setLoginMode(mode) {
+  loginMode = mode === "admin" ? "admin" : "assistant";
+  const isAdminLogin = loginMode === "admin";
+  els.loginModeButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.loginMode === loginMode);
+  });
+  els.loginModeTitle.textContent = "选择进入模式";
+  els.loginModeHint.textContent = isAdminLogin
+    ? "管理员输入密码后，可以新建训练营、改模板、改密码和管理排期。"
+    : "助理输入访问码后，可以查看排期、复制话术和勾选已发送。";
+  els.loginCodeLabel.textContent = isAdminLogin ? "管理员密码" : "助理访问码";
+  els.assistantCodeInput.placeholder = isAdminLogin ? "输入管理员密码" : "输入助理访问码";
+  els.assistantLoginButton.textContent = isAdminLogin ? "进入管理员模式" : "进入助理模式";
+  setInlineStatus(els.assistantLoginStatus);
 }
 
 async function restoreStoredSession(preferAdmin = false) {
@@ -494,33 +520,42 @@ function rememberRole(role) {
   window.localStorage.setItem(ROLE_STORAGE_KEY, role);
 }
 
-async function loginAssistant() {
+async function loginSelectedMode() {
   const code = els.assistantCodeInput.value.trim();
   setInlineStatus(els.assistantLoginStatus);
   if (!code) {
-    setInlineStatus(els.assistantLoginStatus, "请输入助理访问码", "error");
-    return showToast("请输入助理访问码");
+    const message = loginMode === "admin" ? "请输入管理员密码" : "请输入助理访问码";
+    setInlineStatus(els.assistantLoginStatus, message, "error");
+    return showToast(message);
   }
   setButtonLoading(els.assistantLoginButton, true, "登录中...");
-  assistantCode = code;
-  rebuildSupabaseClient();
   try {
-    const ok = await verifyAssistantSession({ silent: true });
-    if (!ok) {
-      assistantCode = "";
-      window.localStorage.removeItem(ASSISTANT_STORAGE_KEY);
-      rebuildSupabaseClient();
-      setInlineStatus(els.assistantLoginStatus, "助理访问码不对，请重新输入", "error");
-      return showToast("助理访问码不对");
+    if (loginMode === "admin") {
+      await loginAdminWithCode(code, els.assistantLoginStatus);
+    } else {
+      await loginAssistantWithCode(code, els.assistantLoginStatus);
     }
-    window.localStorage.setItem(ASSISTANT_STORAGE_KEY, assistantCode);
-    rememberRole("assistant");
-    els.assistantCodeInput.value = "";
-    closeAssistantAccessModal();
-    await reloadAndRender("已进入助理模式");
   } finally {
     setButtonLoading(els.assistantLoginButton, false);
   }
+}
+
+async function loginAssistantWithCode(code, statusElement = els.assistantLoginStatus) {
+  assistantCode = code;
+  rebuildSupabaseClient();
+  const ok = await verifyAssistantSession({ silent: true });
+  if (!ok) {
+    assistantCode = "";
+    window.localStorage.removeItem(ASSISTANT_STORAGE_KEY);
+    rebuildSupabaseClient();
+    setInlineStatus(statusElement, "助理访问码不对，请重新输入", "error");
+    return showToast("助理访问码不对");
+  }
+  window.localStorage.setItem(ASSISTANT_STORAGE_KEY, assistantCode);
+  rememberRole("assistant");
+  els.assistantCodeInput.value = "";
+  closeAssistantAccessModal();
+  await reloadAndRender("已进入助理模式");
 }
 
 async function verifyAssistantSession({ silent = false } = {}) {
@@ -617,30 +652,35 @@ async function loginAdmin() {
   const code = els.adminCodeInput.value.trim();
   setInlineStatus(els.adminLoginStatus);
   if (!code) {
-    setInlineStatus(els.adminLoginStatus, "请输入管理员口令", "error");
-    return showToast("请输入管理员口令");
+    setInlineStatus(els.adminLoginStatus, "请输入管理员密码", "error");
+    return showToast("请输入管理员密码");
   }
   setButtonLoading(els.adminLoginButton, true, "登录中...");
-  adminCode = code;
-  rebuildSupabaseClient();
   try {
-    const ok = await verifyAdminSession({ silent: true });
-    if (!ok) {
-      adminCode = "";
-      window.localStorage.removeItem(ADMIN_STORAGE_KEY);
-      rebuildSupabaseClient();
-      setInlineStatus(els.adminLoginStatus, "管理员口令不对，请重新输入", "error");
-      return showToast("管理员口令不对");
-    }
-    window.localStorage.setItem(ADMIN_STORAGE_KEY, adminCode);
-    rememberRole("admin");
-    els.adminCodeInput.value = "";
-    closeAssistantAccessModal();
-    closeAdminModal();
-    await reloadAndRender("已进入管理员模式");
+    await loginAdminWithCode(code, els.adminLoginStatus);
   } finally {
     setButtonLoading(els.adminLoginButton, false);
   }
+}
+
+async function loginAdminWithCode(code, statusElement = els.adminLoginStatus) {
+  adminCode = code;
+  rebuildSupabaseClient();
+  const ok = await verifyAdminSession({ silent: true });
+  if (!ok) {
+    adminCode = "";
+    window.localStorage.removeItem(ADMIN_STORAGE_KEY);
+    rebuildSupabaseClient();
+    setInlineStatus(statusElement, "管理员密码不对，请重新输入", "error");
+    return showToast("管理员密码不对");
+  }
+  window.localStorage.setItem(ADMIN_STORAGE_KEY, adminCode);
+  rememberRole("admin");
+  els.adminCodeInput.value = "";
+  els.assistantCodeInput.value = "";
+  closeAssistantAccessModal();
+  closeAdminModal();
+  await reloadAndRender("已进入管理员模式");
 }
 
 async function verifyAdminSession({ silent = false } = {}) {
@@ -658,7 +698,7 @@ async function verifyAdminSession({ silent = false } = {}) {
       window.localStorage.removeItem(ROLE_STORAGE_KEY);
     }
     rebuildSupabaseClient();
-    if (!silent) showToast("管理员口令已失效");
+    if (!silent) showToast("管理员密码已失效");
   }
   setAdminState(ok);
   return ok;
@@ -668,8 +708,8 @@ async function addAdminCode() {
   if (!requireAdmin()) return;
   const name = els.newAdminName.value.trim();
   const code = els.newAdminCode.value.trim();
-  if (!name || !code) return showToast("名称和口令都要填");
-  if (code.length < 8) return showToast("口令建议至少 8 位");
+  if (!name || !code) return showToast("名称和密码都要填");
+  if (code.length < 8) return showToast("密码建议至少 8 位");
 
   const { error } = await db.rpc("add_admin_code", {
     admin_name: name,
@@ -855,7 +895,7 @@ function applyRoleUI() {
     ? "可新建、修改、删除和新增管理员"
     : hasAccess
       ? "可查看、复制话术、勾选已发送"
-      : "输入助理访问码后才能查看排期";
+      : "选择身份并输入密码后进入";
   els.adminModeButton.textContent = "管理设置";
   els.adminModeButton.hidden = !isAdmin;
   els.switchAssistantButton.hidden = !isAdmin;
@@ -870,7 +910,7 @@ function applyRoleUI() {
 function requireAdmin() {
   if (isAdmin) return true;
   showToast("请先进入管理员模式");
-  openAdminModal();
+  openAssistantAccessModal("admin");
   return false;
 }
 
