@@ -57,7 +57,7 @@ begin
     raise exception 'not admin';
   end if;
 
-  if length(trim(coalesce(assistant_secret, ''))) < 8 then
+  if length(trim(coalesce(assistant_secret, ''))) < 4 then
     raise exception 'assistant secret is too short';
   end if;
 
@@ -81,7 +81,7 @@ end;
 $$;
 
 insert into public.assistant_codes (name, secret_hash)
-values ('默认助理访问码', '90bbcfe20280f90f7d8a7f096d6af119e21c55ccbcce6bed03ea41a869d2419b')
+values ('默认助理访问码', '16740bf13991fe083fbe5820cc8da08a5d88e5a48f44a3cfcc283c27b2797ba7')
 on conflict (secret_hash) do update set
   name = excluded.name,
   active = true;

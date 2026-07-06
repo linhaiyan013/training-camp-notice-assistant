@@ -273,22 +273,31 @@
           <button class="primary-button full" type="button" id="adminLoginButton">进入管理员模式</button>
         </div>
         <div id="adminManagePanel" hidden>
-          <p class="helper-text">当前已进入管理员模式。新增管理员时，给对方设置一个新口令即可。</p>
-          <label>
-            <span>新管理员名称</span>
-            <input id="newAdminName" type="text" placeholder="例如：助教小王" />
-          </label>
-          <label>
-            <span>新管理员口令</span>
-            <input id="newAdminCode" type="text" placeholder="建议 8 位以上，数字+字母" />
-          </label>
-          <button class="primary-button full" type="button" id="addAdminButton">新增管理员</button>
-          <p class="helper-text">修改助理访问码后，助理下次打开页面需要输入新的访问码。</p>
-          <label>
-            <span>新的助理访问码</span>
-            <input id="newAssistantCode" type="text" placeholder="例如：ZL-1234-ABCD" />
-          </label>
-          <button class="secondary-button full" type="button" id="setAssistantCodeButton">更新助理访问码</button>
+          <div class="form-block">
+            <p class="helper-text">当前已进入管理员模式。这里可以管理助理访问码和你的管理员主密码。</p>
+            <label>
+              <span>助理访问码</span>
+              <input id="newAssistantCode" type="text" inputmode="numeric" placeholder="例如：7788" />
+            </label>
+            <button class="secondary-button full" type="button" id="setAssistantCodeButton">更新助理访问码</button>
+            <label>
+              <span>管理员主密码</span>
+              <input id="newPrimaryAdminCode" type="text" placeholder="输入新的管理员密码" />
+            </label>
+            <button class="primary-button full" type="button" id="setPrimaryAdminCodeButton">更新管理员主密码</button>
+          </div>
+          <div class="form-block">
+            <p class="helper-text">如果后面要新增管理员，给对方单独设置一个新口令即可。</p>
+            <label>
+              <span>新管理员名称</span>
+              <input id="newAdminName" type="text" placeholder="例如：助教小王" />
+            </label>
+            <label>
+              <span>新管理员口令</span>
+              <input id="newAdminCode" type="text" placeholder="建议 8 位以上，数字+字母" />
+            </label>
+            <button class="primary-button full" type="button" id="addAdminButton">新增管理员</button>
+          </div>
           <button class="danger-button full" type="button" id="adminLogoutButton">退出管理员模式</button>
         </div>
       </div>

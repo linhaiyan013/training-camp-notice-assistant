@@ -86,6 +86,39 @@ begin
 end;
 $$;
 
+create or replace function public.set_primary_admin_code(admin_name text, admin_secret text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_name text := coalesce(nullif(trim(admin_name), ''), '海岩管理员');
+  new_id uuid;
+begin
+  if not public.is_admin_request() then
+    raise exception 'not admin';
+  end if;
+
+  if length(trim(coalesce(admin_secret, ''))) < 4 then
+    raise exception 'admin secret is too short';
+  end if;
+
+  update public.admin_codes
+  set active = false
+  where name = target_name;
+
+  insert into public.admin_codes (name, secret_hash, active)
+  values (target_name, public.admin_code_hash(trim(admin_secret)), true)
+  on conflict (secret_hash) do update set
+    name = excluded.name,
+    active = true
+  returning id into new_id;
+
+  return new_id;
+end;
+$$;
+
 insert into public.admin_codes (name, secret_hash)
 values ('海岩管理员', '00f0c1279f47fac9ba1472a02d0e7f6e19c17f89c235fcc863a21a9bfff12f8a')
 on conflict (secret_hash) do update set
@@ -205,3 +238,4 @@ grant update (sent, sent_at) on public.task_group_statuses to anon, authenticate
 
 grant execute on function public.verify_admin_code() to anon, authenticated;
 grant execute on function public.add_admin_code(text, text) to anon, authenticated;
+grant execute on function public.set_primary_admin_code(text, text) to anon, authenticated;

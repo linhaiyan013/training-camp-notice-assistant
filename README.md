@@ -17,8 +17,9 @@
 5. 再执行 `supabase/admin-mode.sql`，开启管理员 / 助理模式。
 6. 再执行 `supabase/template-types.sql`，开启完整模板类型。
 7. 再执行 `supabase/assistant-access.sql`，开启助理访问码。
-8. 在 Supabase 项目设置里复制 Project URL 和 publishable key / anon public key。
-9. 打开 `config.js`，替换：
+8. 再执行 `supabase/password-management.sql`，开启密码管理，并把默认助理访问码设为短码。
+9. 在 Supabase 项目设置里复制 Project URL 和 publishable key / anon public key。
+10. 打开 `config.js`，替换：
 
 ```js
 window.TRAINING_CAMP_SUPABASE = {
@@ -27,7 +28,9 @@ window.TRAINING_CAMP_SUPABASE = {
 };
 ```
 
-管理员模式和助理访问码都使用轻量口令 + Supabase RLS 控制。助理输入访问码后，可以查看、复制话术、勾选已发送；新建训练营、修改模板、删除排期、新增管理员、修改助理访问码需要管理员口令。
+管理员模式和助理访问码都使用轻量口令 + Supabase RLS 控制。助理输入访问码后，可以查看、复制话术、勾选已发送；新建训练营、修改模板、删除排期、新增管理员、修改助理访问码、修改管理员主密码需要管理员口令。
+
+当前默认助理访问码是 `7788`。管理员主密码可在页面右上角「管理设置」里修改。
 
 ## 免费部署
 

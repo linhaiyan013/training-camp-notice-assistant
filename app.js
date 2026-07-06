@@ -83,6 +83,7 @@ const els = {
   adminCodeInput: document.querySelector("#adminCodeInput"),
   newAdminName: document.querySelector("#newAdminName"),
   newAdminCode: document.querySelector("#newAdminCode"),
+  newPrimaryAdminCode: document.querySelector("#newPrimaryAdminCode"),
   assistantAccessModal: document.querySelector("#assistantAccessModal"),
   assistantCodeInput: document.querySelector("#assistantCodeInput"),
   newAssistantCode: document.querySelector("#newAssistantCode"),
@@ -493,6 +494,7 @@ function setupAdminMode() {
   document.querySelector("#adminLogoutButton").addEventListener("click", logoutAdmin);
   document.querySelector("#addAdminButton").addEventListener("click", addAdminCode);
   document.querySelector("#setAssistantCodeButton").addEventListener("click", setAssistantCode);
+  document.querySelector("#setPrimaryAdminCodeButton").addEventListener("click", setPrimaryAdminCode);
   els.adminModal.addEventListener("click", (event) => {
     if (event.target === els.adminModal) closeAdminModal();
   });
@@ -596,7 +598,7 @@ async function setAssistantCode() {
   if (!requireAdmin()) return;
   const code = els.newAssistantCode.value.trim();
   if (!code) return showToast("请输入新的助理访问码");
-  if (code.length < 8) return showToast("访问码建议至少 8 位");
+  if (code.length < 4) return showToast("访问码至少 4 位");
 
   const { error } = await db.rpc("set_assistant_code", {
     assistant_name: "助理访问码",
@@ -610,6 +612,26 @@ async function setAssistantCode() {
   rebuildSupabaseClient();
   els.newAssistantCode.value = "";
   showToast("助理访问码已更新");
+}
+
+async function setPrimaryAdminCode() {
+  if (!requireAdmin()) return;
+  const code = els.newPrimaryAdminCode.value.trim();
+  if (!code) return showToast("请输入新的管理员主密码");
+  if (code.length < 4) return showToast("管理员主密码至少 4 位");
+
+  const { error } = await db.rpc("set_primary_admin_code", {
+    admin_name: "海岩管理员",
+    admin_secret: code,
+  });
+  if (error) return showToast(`更新失败：${error.message}`);
+
+  adminCode = code;
+  window.localStorage.setItem(ADMIN_STORAGE_KEY, adminCode);
+  rebuildSupabaseClient();
+  setAdminState(true);
+  els.newPrimaryAdminCode.value = "";
+  showToast("管理员主密码已更新");
 }
 
 function logoutAdmin() {
