@@ -115,7 +115,13 @@ async function init() {
   const ready = await setupSupabase();
   if (!ready) return;
 
-  await restoreStoredSession();
+  const wantsAdminEntry = isAdminEntryRequested();
+  await restoreStoredSession(wantsAdminEntry);
+  if (wantsAdminEntry && !isAdmin) {
+    renderAccessRequired();
+    openAdminModal();
+    return;
+  }
   if (!canAccessData()) {
     renderAccessRequired();
     openAssistantAccessModal();
@@ -123,6 +129,7 @@ async function init() {
   }
   await loadCloudData();
   renderAll();
+  if (wantsAdminEntry && isAdmin) openAdminModal();
   window.setInterval(async () => {
     if (!canAccessData()) return;
     const isEditingCamp = els.campForm.classList.contains("open");
@@ -453,7 +460,17 @@ function closeAssistantAccessModal() {
   els.assistantAccessModal.hidden = true;
 }
 
-async function restoreStoredSession() {
+function isAdminEntryRequested() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("admin") === "1" || window.location.hash === "#admin";
+}
+
+async function restoreStoredSession(preferAdmin = false) {
+  if (preferAdmin && adminCode) {
+    await verifyAdminSession({ silent: true });
+    if (isAdmin) return;
+  }
+
   if (preferredRole === "assistant" && assistantCode) {
     await verifyAssistantSession({ silent: true });
     if (hasAssistantAccess) return;
@@ -773,7 +790,8 @@ function applyRoleUI() {
     : hasAccess
       ? "可查看、复制话术、勾选已发送"
       : "输入助理访问码后才能查看排期";
-  els.adminModeButton.textContent = isAdmin ? "管理设置" : adminCode ? "切管理员" : "管理员登录";
+  els.adminModeButton.textContent = "管理设置";
+  els.adminModeButton.hidden = !isAdmin;
   els.switchAssistantButton.hidden = !isAdmin;
   document.querySelectorAll("[data-admin-only]").forEach((element) => {
     element.classList.toggle("admin-only-hidden", !isAdmin);
