@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>训练营消息排期助手</title>
-    <link rel="stylesheet" href="./styles.css?v=assistant-clean1" />
+    <link rel="stylesheet" href="./styles.css?v=login-error1" />
   </head>
   <body>
     <div class="app">
@@ -253,6 +253,7 @@
             <input id="assistantCodeInput" type="password" inputmode="text" autocomplete="current-password" placeholder="输入助理访问码" />
           </label>
           <button class="primary-button full" type="button" id="assistantLoginButton">进入助理模式</button>
+          <p class="inline-status" id="assistantLoginStatus" aria-live="polite"></p>
           <button class="text-button full" type="button" id="assistantAdminLoginButton" hidden>我是管理员</button>
         </div>
       </div>
@@ -271,6 +272,7 @@
             <input id="adminCodeInput" type="password" inputmode="text" autocomplete="current-password" placeholder="输入管理员口令" />
           </label>
           <button class="primary-button full" type="button" id="adminLoginButton">进入管理员模式</button>
+          <p class="inline-status" id="adminLoginStatus" aria-live="polite"></p>
         </div>
         <div id="adminManagePanel" hidden>
           <div class="form-block">
@@ -308,6 +310,6 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./config.js"></script>
-    <script src="./app.js?v=assistant-clean1"></script>
+    <script src="./app.js?v=login-error1"></script>
   </body>
 </html>
