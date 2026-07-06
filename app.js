@@ -34,6 +34,7 @@ const SUPABASE_TABLES = {
 
 const ADMIN_STORAGE_KEY = "training-camp-admin-code";
 const ASSISTANT_STORAGE_KEY = "training-camp-assistant-code";
+const ROLE_STORAGE_KEY = "training-camp-last-role";
 
 let db = null;
 let currentPage = "today";
@@ -43,6 +44,7 @@ let activeTaskId = null;
 let state = emptyState();
 let adminCode = window.localStorage.getItem(ADMIN_STORAGE_KEY) || "";
 let assistantCode = window.localStorage.getItem(ASSISTANT_STORAGE_KEY) || "";
+let preferredRole = window.localStorage.getItem(ROLE_STORAGE_KEY) || "";
 let isAdmin = false;
 let hasAssistantAccess = false;
 
@@ -81,12 +83,18 @@ const els = {
   adminLoginPanel: document.querySelector("#adminLoginPanel"),
   adminManagePanel: document.querySelector("#adminManagePanel"),
   adminCodeInput: document.querySelector("#adminCodeInput"),
+  adminLoginButton: document.querySelector("#adminLoginButton"),
   newAdminName: document.querySelector("#newAdminName"),
   newAdminCode: document.querySelector("#newAdminCode"),
   newPrimaryAdminCode: document.querySelector("#newPrimaryAdminCode"),
+  primaryAdminCodeStatus: document.querySelector("#primaryAdminCodeStatus"),
+  setPrimaryAdminCodeButton: document.querySelector("#setPrimaryAdminCodeButton"),
   assistantAccessModal: document.querySelector("#assistantAccessModal"),
   assistantCodeInput: document.querySelector("#assistantCodeInput"),
+  assistantLoginButton: document.querySelector("#assistantLoginButton"),
   newAssistantCode: document.querySelector("#newAssistantCode"),
+  assistantCodeStatus: document.querySelector("#assistantCodeStatus"),
+  setAssistantCodeButton: document.querySelector("#setAssistantCodeButton"),
   toast: document.querySelector("#toast"),
 };
 
@@ -107,8 +115,7 @@ async function init() {
   const ready = await setupSupabase();
   if (!ready) return;
 
-  if (adminCode) await verifyAdminSession({ silent: true });
-  if (!isAdmin && assistantCode) await verifyAssistantSession({ silent: true });
+  await restoreStoredSession();
   if (!canAccessData()) {
     renderAccessRequired();
     openAssistantAccessModal();
@@ -446,6 +453,26 @@ function closeAssistantAccessModal() {
   els.assistantAccessModal.hidden = true;
 }
 
+async function restoreStoredSession() {
+  if (preferredRole === "assistant" && assistantCode) {
+    await verifyAssistantSession({ silent: true });
+    if (hasAssistantAccess) return;
+  }
+
+  if (preferredRole === "admin" && adminCode) {
+    await verifyAdminSession({ silent: true });
+    if (isAdmin) return;
+  }
+
+  if (adminCode) await verifyAdminSession({ silent: true });
+  if (!isAdmin && assistantCode) await verifyAssistantSession({ silent: true });
+}
+
+function rememberRole(role) {
+  preferredRole = role;
+  window.localStorage.setItem(ROLE_STORAGE_KEY, role);
+}
+
 async function loginAssistant() {
   const code = els.assistantCodeInput.value.trim();
   if (!code) return showToast("请输入助理访问码");
@@ -459,6 +486,7 @@ async function loginAssistant() {
     return showToast("助理访问码不对");
   }
   window.localStorage.setItem(ASSISTANT_STORAGE_KEY, assistantCode);
+  rememberRole("assistant");
   els.assistantCodeInput.value = "";
   closeAssistantAccessModal();
   await reloadAndRender("已进入助理模式");
@@ -474,6 +502,10 @@ async function verifyAssistantSession({ silent = false } = {}) {
   if (!ok) {
     assistantCode = "";
     window.localStorage.removeItem(ASSISTANT_STORAGE_KEY);
+    if (preferredRole === "assistant") {
+      preferredRole = "";
+      window.localStorage.removeItem(ROLE_STORAGE_KEY);
+    }
     rebuildSupabaseClient();
     if (!silent) showToast("助理访问码已失效");
   }
@@ -518,6 +550,7 @@ async function handleAdminModeButton() {
 function switchToAssistantView() {
   if (!isAdmin) return;
   setAdminState(false);
+  rememberRole("assistant");
   closeAdminModal();
   if (currentPage === "templates") openPage("today");
   renderAll();
@@ -554,6 +587,7 @@ async function loginAdmin() {
     return showToast("管理员口令不对");
   }
   window.localStorage.setItem(ADMIN_STORAGE_KEY, adminCode);
+  rememberRole("admin");
   els.adminCodeInput.value = "";
   closeAssistantAccessModal();
   closeAdminModal();
@@ -570,6 +604,10 @@ async function verifyAdminSession({ silent = false } = {}) {
   if (!ok) {
     adminCode = "";
     window.localStorage.removeItem(ADMIN_STORAGE_KEY);
+    if (preferredRole === "admin") {
+      preferredRole = "";
+      window.localStorage.removeItem(ROLE_STORAGE_KEY);
+    }
     rebuildSupabaseClient();
     if (!silent) showToast("管理员口令已失效");
   }
@@ -594,44 +632,106 @@ async function addAdminCode() {
   showToast("新管理员已添加");
 }
 
+function setInlineStatus(element, message = "", type = "") {
+  if (!element) return;
+  element.textContent = message;
+  element.className = type ? `inline-status ${type}` : "inline-status";
+}
+
+function setButtonLoading(button, isLoading, loadingText = "更新中...") {
+  if (!button) return "";
+  if (isLoading) {
+    const originalText = button.textContent;
+    button.dataset.originalText = originalText;
+    button.textContent = loadingText;
+    button.disabled = true;
+    return originalText;
+  }
+  button.textContent = button.dataset.originalText || button.textContent;
+  button.disabled = false;
+  delete button.dataset.originalText;
+  return "";
+}
+
 async function setAssistantCode() {
   if (!requireAdmin()) return;
   const code = els.newAssistantCode.value.trim();
-  if (!code) return showToast("请输入新的助理访问码");
-  if (code.length < 4) return showToast("访问码至少 4 位");
+  if (!code) {
+    setInlineStatus(els.assistantCodeStatus, "请输入新的助理访问码", "error");
+    return showToast("请输入新的助理访问码");
+  }
+  if (code.length < 4) {
+    setInlineStatus(els.assistantCodeStatus, "访问码至少 4 位", "error");
+    return showToast("访问码至少 4 位");
+  }
+  if (!window.confirm(`确认把助理访问码改成「${code}」吗？`)) {
+    setInlineStatus(els.assistantCodeStatus, "已取消修改助理访问码");
+    return;
+  }
 
-  const { error } = await db.rpc("set_assistant_code", {
-    assistant_name: "助理访问码",
-    assistant_secret: code,
-  });
-  if (error) return showToast(`更新失败：${error.message}`);
+  setInlineStatus(els.assistantCodeStatus, "正在更新助理访问码...", "pending");
+  setButtonLoading(els.setAssistantCodeButton, true);
+  try {
+    const { error } = await db.rpc("set_assistant_code", {
+      assistant_name: "助理访问码",
+      assistant_secret: code,
+    });
+    if (error) throw error;
 
-  assistantCode = code;
-  hasAssistantAccess = true;
-  window.localStorage.setItem(ASSISTANT_STORAGE_KEY, assistantCode);
-  rebuildSupabaseClient();
-  els.newAssistantCode.value = "";
-  showToast("助理访问码已更新");
+    assistantCode = code;
+    hasAssistantAccess = true;
+    window.localStorage.setItem(ASSISTANT_STORAGE_KEY, assistantCode);
+    rebuildSupabaseClient();
+    els.newAssistantCode.value = "";
+    setInlineStatus(els.assistantCodeStatus, "已更新成功，助理下次使用新访问码进入。", "success");
+    showToast("助理访问码已更新");
+  } catch (error) {
+    setInlineStatus(els.assistantCodeStatus, `更新失败：${error.message}`, "error");
+    showToast("助理访问码更新失败");
+  } finally {
+    setButtonLoading(els.setAssistantCodeButton, false);
+  }
 }
 
 async function setPrimaryAdminCode() {
   if (!requireAdmin()) return;
   const code = els.newPrimaryAdminCode.value.trim();
-  if (!code) return showToast("请输入新的管理员主密码");
-  if (code.length < 4) return showToast("管理员主密码至少 4 位");
+  if (!code) {
+    setInlineStatus(els.primaryAdminCodeStatus, "请输入新的管理员主密码", "error");
+    return showToast("请输入新的管理员主密码");
+  }
+  if (code.length < 4) {
+    setInlineStatus(els.primaryAdminCodeStatus, "管理员主密码至少 4 位", "error");
+    return showToast("管理员主密码至少 4 位");
+  }
+  if (!window.confirm("确认修改管理员主密码吗？改完后旧管理员主密码会失效。")) {
+    setInlineStatus(els.primaryAdminCodeStatus, "已取消修改管理员主密码");
+    return;
+  }
 
-  const { error } = await db.rpc("set_primary_admin_code", {
-    admin_name: "海岩管理员",
-    admin_secret: code,
-  });
-  if (error) return showToast(`更新失败：${error.message}`);
+  setInlineStatus(els.primaryAdminCodeStatus, "正在更新管理员主密码...", "pending");
+  setButtonLoading(els.setPrimaryAdminCodeButton, true);
+  try {
+    const { error } = await db.rpc("set_primary_admin_code", {
+      admin_name: "海岩管理员",
+      admin_secret: code,
+    });
+    if (error) throw error;
 
-  adminCode = code;
-  window.localStorage.setItem(ADMIN_STORAGE_KEY, adminCode);
-  rebuildSupabaseClient();
-  setAdminState(true);
-  els.newPrimaryAdminCode.value = "";
-  showToast("管理员主密码已更新");
+    adminCode = code;
+    window.localStorage.setItem(ADMIN_STORAGE_KEY, adminCode);
+    rememberRole("admin");
+    rebuildSupabaseClient();
+    setAdminState(true);
+    els.newPrimaryAdminCode.value = "";
+    setInlineStatus(els.primaryAdminCodeStatus, "已更新成功，新的管理员主密码已经生效。", "success");
+    showToast("管理员主密码已更新");
+  } catch (error) {
+    setInlineStatus(els.primaryAdminCodeStatus, `更新失败：${error.message}`, "error");
+    showToast("管理员主密码更新失败");
+  } finally {
+    setButtonLoading(els.setPrimaryAdminCodeButton, false);
+  }
 }
 
 function logoutAdmin() {
@@ -1277,8 +1377,11 @@ async function copyGroupName(groupName) {
 }
 
 async function openWechatGroup(groupName) {
-  await copyText(groupName || "");
-  showToast("群名已复制，正在打开微信");
+  const name = groupName || "这个群";
+  showToast(`正在打开微信。若没跳转，请到微信搜索「${name}」`);
+  window.setTimeout(() => {
+    showToast(`浏览器可能拦截了微信跳转，请手动打开微信搜索「${name}」`);
+  }, 1200);
   window.setTimeout(() => {
     window.location.href = "weixin://";
   }, 180);

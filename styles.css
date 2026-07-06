@@ -237,6 +237,15 @@ p {
   font-weight: 800;
 }
 
+.primary-button:disabled,
+.secondary-button:disabled,
+.text-button:disabled,
+.icon-button:disabled,
+.danger-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
 .primary-button {
   padding: 0 16px;
   color: #ffffff;
@@ -474,6 +483,44 @@ p {
   color: var(--muted);
   line-height: 1.55;
   font-size: 13px;
+}
+
+.inline-status {
+  margin: -4px 0 0;
+  min-height: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.inline-status:empty {
+  display: none;
+}
+
+.inline-status.success,
+.inline-status.error,
+.inline-status.pending {
+  padding: 9px 10px;
+  border-radius: 10px;
+}
+
+.inline-status.success {
+  color: #15724e;
+  background: #ecfbf4;
+  border: 1px solid #bdebd4;
+}
+
+.inline-status.error {
+  color: #a33545;
+  background: #fff0f3;
+  border: 1px solid #fac6d1;
+}
+
+.inline-status.pending {
+  color: #8a4c18;
+  background: #fff7e8;
+  border: 1px solid #f3d5a6;
 }
 
 .calendar-card {
