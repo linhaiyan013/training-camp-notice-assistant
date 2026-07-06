@@ -79,6 +79,7 @@ const els = {
   roleHint: document.querySelector("#roleHint"),
   adminModeButton: document.querySelector("#adminModeButton"),
   switchAssistantButton: document.querySelector("#switchAssistantButton"),
+  modeLogoutButton: document.querySelector("#modeLogoutButton"),
   adminModal: document.querySelector("#adminModal"),
   adminLoginPanel: document.querySelector("#adminLoginPanel"),
   adminManagePanel: document.querySelector("#adminManagePanel"),
@@ -551,6 +552,7 @@ function setAssistantAccessState(nextHasAccess) {
 function setupAdminMode() {
   els.adminModeButton.addEventListener("click", handleAdminModeButton);
   els.switchAssistantButton.addEventListener("click", switchToAssistantView);
+  els.modeLogoutButton.addEventListener("click", logoutCurrentMode);
   document.querySelector("#closeAdminModal").addEventListener("click", closeAdminModal);
   document.querySelector("#adminLoginButton").addEventListener("click", loginAdmin);
   document.querySelector("#adminLogoutButton").addEventListener("click", logoutAdmin);
@@ -583,6 +585,12 @@ function switchToAssistantView() {
   rememberRole("assistant");
   closeAdminModal();
   if (currentPage === "templates") openPage("today");
+  if (!hasAssistantAccess) {
+    renderAccessRequired();
+    openAssistantAccessModal();
+    showToast("已切到助理视角，请输入助理访问码");
+    return;
+  }
   renderAll();
   showToast("已切到助理视角");
 }
@@ -778,6 +786,10 @@ async function setPrimaryAdminCode() {
 function logoutAdmin() {
   adminCode = "";
   window.localStorage.removeItem(ADMIN_STORAGE_KEY);
+  if (preferredRole === "admin") {
+    preferredRole = "";
+    window.localStorage.removeItem(ROLE_STORAGE_KEY);
+  }
   rebuildSupabaseClient();
   setAdminState(false);
   closeAdminModal();
@@ -790,6 +802,36 @@ function logoutAdmin() {
     openAssistantAccessModal();
     showToast("已退出管理员模式");
   }
+}
+
+function logoutAssistant() {
+  assistantCode = "";
+  hasAssistantAccess = false;
+  window.localStorage.removeItem(ASSISTANT_STORAGE_KEY);
+  if (preferredRole === "assistant") {
+    preferredRole = "";
+    window.localStorage.removeItem(ROLE_STORAGE_KEY);
+  }
+  rebuildSupabaseClient();
+  closeAssistantAccessModal();
+  closeAdminModal();
+  if (currentPage === "templates") openPage("today");
+  applyRoleUI();
+  renderAccessRequired();
+  openAssistantAccessModal();
+  showToast("已退出助理模式");
+}
+
+function logoutCurrentMode() {
+  if (isAdmin) {
+    logoutAdmin();
+    return;
+  }
+  if (hasAssistantAccess) {
+    logoutAssistant();
+    return;
+  }
+  showToast("当前还没有登录");
 }
 
 function setAdminState(nextIsAdmin) {
@@ -817,6 +859,7 @@ function applyRoleUI() {
   els.adminModeButton.textContent = "管理设置";
   els.adminModeButton.hidden = !isAdmin;
   els.switchAssistantButton.hidden = !isAdmin;
+  els.modeLogoutButton.hidden = !hasAccess;
   document.querySelectorAll("[data-admin-only]").forEach((element) => {
     element.classList.toggle("admin-only-hidden", !isAdmin);
   });
@@ -832,7 +875,7 @@ function requireAdmin() {
 }
 
 function canAccessData() {
-  return isAdmin || hasAssistantAccess || Boolean(adminCode);
+  return isAdmin || hasAssistantAccess;
 }
 
 function setupGlobalActions() {
