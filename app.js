@@ -1181,6 +1181,7 @@ function setupGlobalActions() {
     const copyButton = event.target.closest("[data-copy-task]");
     const openButton = event.target.closest("[data-open-task]");
     const allButton = event.target.closest("[data-mark-all]");
+    const unmarkAllButton = event.target.closest("[data-unmark-all]");
     const dayButton = event.target.closest("[data-date]");
     const saveTimeButton = event.target.closest("[data-save-detail-time]");
     const toggleGroupButton = event.target.closest("[data-toggle-group]");
@@ -1203,6 +1204,10 @@ function setupGlobalActions() {
     }
     if (allButton) {
       await markAllGroups(allButton.dataset.markAll);
+      return;
+    }
+    if (unmarkAllButton) {
+      await unmarkAllGroups(unmarkAllButton.dataset.unmarkAll);
       return;
     }
     if (dayButton) {
@@ -1518,6 +1523,7 @@ function renderTaskCard(task) {
         <button class="secondary-button" type="button" data-copy-task="${task.id}">复制话术</button>
         <button class="secondary-button" type="button" data-open-task="${task.id}">群列表</button>
         <button class="primary-button" type="button" data-mark-all="${task.id}">全标已发</button>
+        <button class="secondary-button" type="button" data-unmark-all="${task.id}">取消已发</button>
       </div>
     </article>
   `;
@@ -1731,6 +1737,19 @@ async function markAllGroups(taskId) {
     )
   );
   await reloadAndRender("已全部标记");
+}
+
+async function unmarkAllGroups(taskId) {
+  const statuses = statusesForTask(taskId);
+  await Promise.all(
+    statuses.map((status) =>
+      cloudUpdate(SUPABASE_TABLES.statuses, status.id, {
+        sent: false,
+        sent_at: null,
+      })
+    )
+  );
+  await reloadAndRender("已取消标记");
 }
 
 async function updateTaskCompletion(taskId) {
