@@ -64,6 +64,7 @@ const els = {
   todayDone: document.querySelector("#todayDone"),
   todayPending: document.querySelector("#todayPending"),
   reminderButton: document.querySelector("#reminderButton"),
+  calendarExportButton: document.querySelector("#calendarExportButton"),
   reminderHint: document.querySelector("#reminderHint"),
   todayList: document.querySelector("#todayList"),
   monthTitle: document.querySelector("#monthTitle"),
@@ -944,6 +945,7 @@ function canAccessData() {
 
 function setupReminderControls() {
   els.reminderButton.addEventListener("click", toggleReminders);
+  els.calendarExportButton.addEventListener("click", exportCalendarReminders);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
       renderTodayHeader();
@@ -985,6 +987,123 @@ async function toggleReminders() {
   checkDueReminders({ force: true });
 }
 
+function exportCalendarReminders() {
+  if (!canAccessData()) {
+    showToast("请先登录后再导入日历");
+    openAssistantAccessModal();
+    return;
+  }
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const exportTasks = state.tasks
+    .filter((task) => parseDate(task.send_at) >= startOfToday && !isTaskDone(task))
+    .sort(compareTaskTime);
+
+  if (!exportTasks.length) {
+    showToast("暂无需要导入的未来提醒", 2400);
+    return;
+  }
+
+  const ics = buildCalendarICS(exportTasks);
+  const filename = `训练营消息提醒-${toDateInput(new Date())}.ics`;
+  downloadTextFile(filename, ics, "text/calendar;charset=utf-8");
+  showToast(`已生成 ${exportTasks.length} 条日历提醒`, 3000);
+}
+
+function buildCalendarICS(tasks) {
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Training Camp Notice Assistant//CN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "X-WR-CALNAME:训练营消息提醒",
+  ];
+
+  tasks.forEach((task) => {
+    const camp = getCamp(task.camp_id);
+    const lesson = getLesson(task.lesson_id);
+    const start = parseDate(task.send_at);
+    const end = addMinutes(start, 15);
+    const groups = statusesForTask(task.id).map((status) => status.group_name);
+    const title = `发群：${task.type_label}｜${camp?.name || "训练营"}`;
+    const description = [
+      `课程：${lesson?.title || camp?.topic || "-"}`,
+      `上课：${formatClassTime(task)}`,
+      `微信群：${groups.join("、") || "-"}`,
+      "",
+      "话术：",
+      task.message || "",
+    ].join("\n");
+
+    lines.push(
+      "BEGIN:VEVENT",
+      `UID:${escapeICSText(task.id)}@training-camp-notice-assistant`,
+      `DTSTAMP:${formatICSUTC(new Date())}`,
+      `DTSTART:${formatICSLocal(start)}`,
+      `DTEND:${formatICSLocal(end)}`,
+      `SUMMARY:${escapeICSText(title)}`,
+      `DESCRIPTION:${escapeICSText(description)}`,
+      "BEGIN:VALARM",
+      "ACTION:DISPLAY",
+      `DESCRIPTION:${escapeICSText(title)}`,
+      "TRIGGER:PT0M",
+      "END:VALARM",
+      "END:VEVENT"
+    );
+  });
+
+  lines.push("END:VCALENDAR");
+  return lines.map(foldICSLine).join("\r\n");
+}
+
+function downloadTextFile(filename, text, mimeType) {
+  const blob = new Blob([text], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+function formatICSLocal(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+  return `${year}${month}${day}T${hours}${minutes}${seconds}`;
+}
+
+function formatICSUTC(date) {
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function escapeICSText(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\r?\n/g, "\\n")
+    .replace(/,/g, "\\,")
+    .replace(/;/g, "\\;");
+}
+
+function foldICSLine(line) {
+  if (line.length <= 70) return line;
+  const chunks = [];
+  let rest = line;
+  while (rest.length > 70) {
+    chunks.push(rest.slice(0, 70));
+    rest = rest.slice(70);
+  }
+  chunks.push(rest);
+  return chunks.join("\r\n ");
+}
+
 async function requestNotificationPermission() {
   if (!("Notification" in window)) return "unsupported";
   if (Notification.permission === "default") {
@@ -1001,6 +1120,7 @@ function updateReminderUI() {
   if (!els.reminderButton || !els.reminderHint) return;
   const hasAccess = canAccessData();
   els.reminderButton.disabled = !hasAccess;
+  els.calendarExportButton.disabled = !hasAccess;
   els.reminderButton.classList.toggle("active", remindersEnabled && hasAccess);
   els.reminderButton.textContent = remindersEnabled && hasAccess ? "关闭提醒" : "开启提醒";
 
