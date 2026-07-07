@@ -35,6 +35,9 @@ const SUPABASE_TABLES = {
 const ADMIN_STORAGE_KEY = "training-camp-admin-code";
 const ASSISTANT_STORAGE_KEY = "training-camp-assistant-code";
 const ROLE_STORAGE_KEY = "training-camp-last-role";
+const REMINDER_ENABLED_KEY = "training-camp-reminders-enabled";
+const REMINDER_LAST_KEY = "training-camp-reminder-last";
+const REMINDER_REPEAT_MINUTES = 10;
 
 let db = null;
 let currentPage = "today";
@@ -46,6 +49,10 @@ let adminCode = window.localStorage.getItem(ADMIN_STORAGE_KEY) || "";
 let assistantCode = window.localStorage.getItem(ASSISTANT_STORAGE_KEY) || "";
 let preferredRole = window.localStorage.getItem(ROLE_STORAGE_KEY) || "";
 let loginMode = preferredRole === "admin" ? "admin" : "assistant";
+let remindersEnabled = window.localStorage.getItem(REMINDER_ENABLED_KEY) === "1";
+let reminderLastMap = readReminderLastMap();
+let reminderAudioContext = null;
+let appIntervalsStarted = false;
 let isAdmin = false;
 let hasAssistantAccess = false;
 
@@ -56,6 +63,8 @@ const els = {
   todayTotal: document.querySelector("#todayTotal"),
   todayDone: document.querySelector("#todayDone"),
   todayPending: document.querySelector("#todayPending"),
+  reminderButton: document.querySelector("#reminderButton"),
+  reminderHint: document.querySelector("#reminderHint"),
   todayList: document.querySelector("#todayList"),
   monthTitle: document.querySelector("#monthTitle"),
   calendarGrid: document.querySelector("#calendarGrid"),
@@ -116,12 +125,14 @@ async function init() {
   setupAssistantAccess();
   setupAdminMode();
   setupGlobalActions();
+  setupReminderControls();
   applyRoleUI();
   renderTodayHeader();
   renderEmptyShell("正在连接 Supabase 云端数据...");
 
   const ready = await setupSupabase();
   if (!ready) return;
+  startAppIntervals();
 
   const wantsAdminEntry = isAdminEntryRequested();
   await restoreStoredSession(wantsAdminEntry);
@@ -138,6 +149,11 @@ async function init() {
   await loadCloudData();
   renderAll();
   if (wantsAdminEntry && isAdmin) openAdminModal();
+}
+
+function startAppIntervals() {
+  if (appIntervalsStarted) return;
+  appIntervalsStarted = true;
   window.setInterval(async () => {
     if (!canAccessData()) return;
     const isEditingCamp = els.campForm.classList.contains("open");
@@ -145,6 +161,13 @@ async function init() {
       await loadCloudData({ silent: true });
       renderAll();
     }
+  }, 30000);
+  window.setInterval(() => {
+    if (!canAccessData()) return;
+    renderTodayHeader();
+    renderTodayList();
+    checkDueReminders();
+    updateReminderUI();
   }, 30000);
 }
 
@@ -905,6 +928,7 @@ function applyRoleUI() {
   });
   if (!isAdmin && currentPage === "templates") currentPage = "today";
   syncActivePage();
+  updateReminderUI();
 }
 
 function requireAdmin() {
@@ -916,6 +940,240 @@ function requireAdmin() {
 
 function canAccessData() {
   return isAdmin || hasAssistantAccess;
+}
+
+function setupReminderControls() {
+  els.reminderButton.addEventListener("click", toggleReminders);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      renderTodayHeader();
+      renderTodayList();
+      checkDueReminders();
+      updateReminderUI();
+    }
+  });
+  updateReminderUI();
+}
+
+async function toggleReminders() {
+  if (!canAccessData()) {
+    showToast("请先登录后再开启提醒");
+    openAssistantAccessModal();
+    return;
+  }
+
+  if (remindersEnabled) {
+    remindersEnabled = false;
+    window.localStorage.removeItem(REMINDER_ENABLED_KEY);
+    updateReminderUI();
+    showToast("到点提醒已关闭");
+    return;
+  }
+
+  remindersEnabled = true;
+  window.localStorage.setItem(REMINDER_ENABLED_KEY, "1");
+  prepareReminderAudio();
+  const permission = await requestNotificationPermission();
+  updateReminderUI();
+  if (permission === "granted") {
+    showToast("提醒已开启，到点会弹通知", 2600);
+  } else if (permission === "denied") {
+    showToast("页面提醒已开，系统通知被浏览器拦截", 3200);
+  } else {
+    showToast("页面提醒已开启，请保持页面打开", 2800);
+  }
+  checkDueReminders({ force: true });
+}
+
+async function requestNotificationPermission() {
+  if (!("Notification" in window)) return "unsupported";
+  if (Notification.permission === "default") {
+    try {
+      return await Notification.requestPermission();
+    } catch (error) {
+      return "unsupported";
+    }
+  }
+  return Notification.permission;
+}
+
+function updateReminderUI() {
+  if (!els.reminderButton || !els.reminderHint) return;
+  const hasAccess = canAccessData();
+  els.reminderButton.disabled = !hasAccess;
+  els.reminderButton.classList.toggle("active", remindersEnabled && hasAccess);
+  els.reminderButton.textContent = remindersEnabled && hasAccess ? "关闭提醒" : "开启提醒";
+
+  if (!hasAccess) {
+    els.reminderHint.textContent = "登录后可开启提醒";
+    return;
+  }
+  if (!remindersEnabled) {
+    els.reminderHint.textContent = "点一次授权，到发送时间会提醒";
+    return;
+  }
+  if (!("Notification" in window)) {
+    els.reminderHint.textContent = "页面提醒已开；当前浏览器不支持系统通知";
+    return;
+  }
+  if (Notification.permission === "granted") {
+    els.reminderHint.textContent = "提醒已开，请保持页面打开";
+    return;
+  }
+  if (Notification.permission === "denied") {
+    els.reminderHint.textContent = "页面提醒已开；系统通知被浏览器拦截";
+    return;
+  }
+  els.reminderHint.textContent = "提醒已开；下次可允许系统通知";
+}
+
+function checkDueReminders({ force = false } = {}) {
+  if (!remindersEnabled || !canAccessData()) return;
+  const now = new Date();
+  const dueTasks = tasksForDate(toDateInput(now))
+    .filter((task) => !isTaskDone(task) && parseDate(task.send_at) <= now)
+    .sort(compareTaskTime);
+  const readyTasks = dueTasks.filter((task) => shouldSendReminder(task, now, force));
+  if (!readyTasks.length) return;
+
+  const taskToOpen = readyTasks[0];
+  readyTasks.forEach((task) => {
+    reminderLastMap[task.id] = now.getTime();
+  });
+  saveReminderLastMap();
+
+  if (readyTasks.length === 1) {
+    notifySingleTask(readyTasks[0]);
+  } else {
+    notifyTaskSummary(readyTasks);
+  }
+  playReminderTone();
+  vibrateReminder();
+  flashDocumentTitle(taskToOpen.type_label || "该发送了");
+}
+
+function shouldSendReminder(task, now, force) {
+  if (force) return true;
+  const last = Number(reminderLastMap[task.id] || 0);
+  if (!last) return true;
+  return now.getTime() - last >= REMINDER_REPEAT_MINUTES * 60000;
+}
+
+function notifySingleTask(task) {
+  const { title, body, toast } = buildReminderCopy(task);
+  showToast(toast, 5200);
+  sendBrowserNotification(title, body, task.id);
+}
+
+function notifyTaskSummary(tasks) {
+  const first = tasks[0];
+  const title = `有 ${tasks.length} 条消息该发送了`;
+  const body = tasks
+    .slice(0, 3)
+    .map((task) => {
+      const camp = getCamp(task.camp_id);
+      return `${formatClock(task.send_at)} ${task.type_label}｜${camp?.name || "训练营"}`;
+    })
+    .join("\n");
+  showToast(`有 ${tasks.length} 条消息该发送了，先看最早的一条`, 5600);
+  sendBrowserNotification(title, body, first.id);
+}
+
+function buildReminderCopy(task) {
+  const camp = getCamp(task.camp_id);
+  const lesson = getLesson(task.lesson_id);
+  const unsent = statusesForTask(task.id).filter((status) => !status.sent).length;
+  const title = `该发消息了：${formatClock(task.send_at)} ${task.type_label}`;
+  const body = `${camp?.name || "训练营"}｜${lesson?.title || camp?.topic || "课程提醒"}\n还有 ${unsent} 个群未发送`;
+  return {
+    title,
+    body,
+    toast: `${formatClock(task.send_at)} ${task.type_label}该发了，还有 ${unsent} 个群未发`,
+  };
+}
+
+function sendBrowserNotification(title, body, taskId) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  try {
+    const notification = new Notification(title, {
+      body,
+      tag: `training-camp-task-${taskId}`,
+      renotify: true,
+      requireInteraction: true,
+    });
+    notification.onclick = () => {
+      window.focus();
+      openTaskDetail(taskId);
+      notification.close();
+    };
+  } catch (error) {
+    showToast("浏览器通知被拦截，请保持页面打开", 2600);
+  }
+}
+
+function prepareReminderAudio() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    reminderAudioContext = reminderAudioContext || new AudioContextClass();
+    reminderAudioContext.resume?.();
+  } catch (error) {
+    reminderAudioContext = null;
+  }
+}
+
+function playReminderTone() {
+  try {
+    prepareReminderAudio();
+    if (!reminderAudioContext) return;
+    const ctx = reminderAudioContext;
+    const startAt = ctx.currentTime + 0.02;
+    [0, 0.34].forEach((offset) => {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, startAt + offset);
+      gain.gain.exponentialRampToValueAtTime(0.22, startAt + offset + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + offset + 0.2);
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.start(startAt + offset);
+      oscillator.stop(startAt + offset + 0.22);
+    });
+  } catch (error) {
+    // Some mobile webviews block audio even after a tap; toast/notification still works.
+  }
+}
+
+function vibrateReminder() {
+  if (navigator.vibrate) navigator.vibrate([260, 120, 260]);
+}
+
+function flashDocumentTitle(label) {
+  const originalTitle = document.title;
+  let count = 0;
+  window.clearInterval(flashDocumentTitle.timer);
+  flashDocumentTitle.timer = window.setInterval(() => {
+    document.title = count % 2 === 0 ? `【提醒】${label}` : originalTitle;
+    count += 1;
+    if (count > 10) {
+      window.clearInterval(flashDocumentTitle.timer);
+      document.title = originalTitle;
+    }
+  }, 750);
+}
+
+function readReminderLastMap() {
+  try {
+    return JSON.parse(window.localStorage.getItem(REMINDER_LAST_KEY) || "{}") || {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function saveReminderLastMap() {
+  window.localStorage.setItem(REMINDER_LAST_KEY, JSON.stringify(reminderLastMap));
 }
 
 function setupGlobalActions() {
@@ -1209,6 +1467,8 @@ function renderAll() {
   renderTemplateSelects();
   if (activeTaskId) renderTaskDetail(activeTaskId);
   applyRoleUI();
+  updateReminderUI();
+  checkDueReminders();
 }
 
 function renderTodayHeader() {
@@ -1764,11 +2024,11 @@ function firstLine(value) {
     .find(Boolean) || "";
 }
 
-function showToast(message) {
+function showToast(message, duration = 1700) {
   els.toast.textContent = message;
   els.toast.classList.add("show");
   window.clearTimeout(showToast.timer);
-  showToast.timer = window.setTimeout(() => els.toast.classList.remove("show"), 1700);
+  showToast.timer = window.setTimeout(() => els.toast.classList.remove("show"), duration);
 }
 
 function escapeHTML(value) {
