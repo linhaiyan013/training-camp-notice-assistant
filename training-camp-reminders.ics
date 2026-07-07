@@ -1,0 +1,111 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Training Camp Notice Assistant//CN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:训练营消息提醒
+BEGIN:VEVENT
+UID:ai-ecommerce-20260709-noon@training-camp-notice-assistant
+DTSTAMP:20260707T153000Z
+DTSTART;TZID=Asia/Shanghai:20260709T120000
+DTEND;TZID=Asia/Shanghai:20260709T121500
+SUMMARY:发群：课前预告｜AI 电商设计轻创营
+DESCRIPTION:课程：看懂赛道\n上课：7月9日 20:00\n微信群：AI电商设计轻创学习群\n\n话术：\n姐妹们，今晚 8 点第一课开始啦～\n这节先带大家看懂 AI 电商设计这个赛道，适合想知道怎么接单、怎么变现的同学。\n今晚 8 点不见不散，能来的同学接个 1～
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:发群：课前预告｜AI 电商设计轻创营
+TRIGGER:PT0M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:ai-ecommerce-20260709-before@training-camp-notice-assistant
+DTSTAMP:20260707T153000Z
+DTSTART;TZID=Asia/Shanghai:20260709T190000
+DTEND;TZID=Asia/Shanghai:20260709T191500
+SUMMARY:发群：上课前1小时预告｜AI 电商设计轻创营
+DESCRIPTION:课程：看懂赛道\n上课：7月9日 20:00\n微信群：AI电商设计轻创学习群\n\n话术：\n还有 1 小时开课啦，今晚 8 点在微脉圈上第一课。\n今天先把 AI 电商设计的方向和机会讲清楚，后面实操才更好跟上。\n今晚 8 点不见不散，准备来的同学接个 1～
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:发群：上课前1小时预告｜AI 电商设计轻创营
+TRIGGER:PT0M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:ai-ecommerce-20260711-noon@training-camp-notice-assistant
+DTSTAMP:20260707T153000Z
+DTSTART;TZID=Asia/Shanghai:20260711T120000
+DTEND;TZID=Asia/Shanghai:20260711T121500
+SUMMARY:发群：课前预告｜AI 电商设计轻创营
+DESCRIPTION:课程：闲鱼获客实操\n上课：7月11日 20:00\n微信群：AI电商设计轻创学习群\n\n话术：\n姐妹们，今晚 8 点第二课来啦～\n这节讲「闲鱼获客实操」，会讲怎么搭账号、发商品、展示案例，让有设计需求的商家找到你。\n今晚 8 点不见不散，想听实操的同学接个 1～
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:发群：课前预告｜AI 电商设计轻创营
+TRIGGER:PT0M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:ai-ecommerce-20260711-before@training-camp-notice-assistant
+DTSTAMP:20260707T153000Z
+DTSTART;TZID=Asia/Shanghai:20260711T190000
+DTEND;TZID=Asia/Shanghai:20260711T191500
+SUMMARY:发群：上课前1小时预告｜AI 电商设计轻创营
+DESCRIPTION:课程：闲鱼获客实操\n上课：7月11日 20:00\n微信群：AI电商设计轻创学习群\n\n话术：\n还有 1 小时开课啦，今晚 8 点微脉圈见。\n今天讲闲鱼获客实操，适合想学会发布商品、展示案例、开始接单的同学。\n今晚 8 点不见不散，准备进课啦～
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:发群：上课前1小时预告｜AI 电商设计轻创营
+TRIGGER:PT0M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:ai-ecommerce-20260713-noon@training-camp-notice-assistant
+DTSTAMP:20260707T153000Z
+DTSTART;TZID=Asia/Shanghai:20260713T120000
+DTEND;TZID=Asia/Shanghai:20260713T121500
+SUMMARY:发群：课前预告｜AI 电商设计轻创营
+DESCRIPTION:课程：电商设计作品库搭建与案例展示\n上课：7月13日 20:00\n微信群：AI电商设计轻创学习群\n\n话术：\n姐妹们，今晚 8 点第三课～\n今天讲「电商设计作品库搭建与案例展示」，会教大家怎么把案例整理出来，让客户一眼看懂你的能力。\n今晚 8 点不见不散，这节对后面获客和成交很重要～
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:发群：课前预告｜AI 电商设计轻创营
+TRIGGER:PT0M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:ai-ecommerce-20260713-before@training-camp-notice-assistant
+DTSTAMP:20260707T153000Z
+DTSTART;TZID=Asia/Shanghai:20260713T190000
+DTEND;TZID=Asia/Shanghai:20260713T191500
+SUMMARY:发群：上课前1小时预告｜AI 电商设计轻创营
+DESCRIPTION:课程：电商设计作品库搭建与案例展示\n上课：7月13日 20:00\n微信群：AI电商设计轻创学习群\n\n话术：\n还有 1 小时开课啦，今晚 8 点微脉圈见。\n今天讲作品库搭建和案例展示，想让自己的作品更像样、更容易打动客户的同学记得来。\n今晚 8 点不见不散，来的同学接个 1～
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:发群：上课前1小时预告｜AI 电商设计轻创营
+TRIGGER:PT0M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:ai-ecommerce-20260715-noon@training-camp-notice-assistant
+DTSTAMP:20260707T153000Z
+DTSTART;TZID=Asia/Shanghai:20260715T120000
+DTEND;TZID=Asia/Shanghai:20260715T121500
+SUMMARY:发群：课前预告｜AI 电商设计轻创营
+DESCRIPTION:课程：客户成交与交付对接\n上课：7月15日 20:00\n微信群：AI电商设计轻创学习群\n\n话术：\n姐妹们，今晚 8 点第四课，也是很关键的一节～\n今天讲「客户成交与交付对接」，包括怎么沟通需求、报价、收定金、把订单顺利交付出去。\n今晚 8 点不见不散，想知道怎么从咨询走到成交的同学一定来～
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:发群：课前预告｜AI 电商设计轻创营
+TRIGGER:PT0M
+END:VALARM
+END:VEVENT
+BEGIN:VEVENT
+UID:ai-ecommerce-20260715-before@training-camp-notice-assistant
+DTSTAMP:20260707T153000Z
+DTSTART;TZID=Asia/Shanghai:20260715T190000
+DTEND;TZID=Asia/Shanghai:20260715T191500
+SUMMARY:发群：上课前1小时预告｜AI 电商设计轻创营
+DESCRIPTION:课程：客户成交与交付对接\n上课：7月15日 20:00\n微信群：AI电商设计轻创学习群\n\n话术：\n还有 1 小时开课啦，今晚 8 点微脉圈见。\n今天讲客户成交和交付对接，偏实战、偏变现，很适合想真正开始接单的同学。\n今晚 8 点不见不散，准备来的同学接个 1～
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:发群：上课前1小时预告｜AI 电商设计轻创营
+TRIGGER:PT0M
+END:VALARM
+END:VEVENT
+END:VCALENDAR

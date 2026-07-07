@@ -38,6 +38,7 @@ const ROLE_STORAGE_KEY = "training-camp-last-role";
 const REMINDER_ENABLED_KEY = "training-camp-reminders-enabled";
 const REMINDER_LAST_KEY = "training-camp-reminder-last";
 const REMINDER_REPEAT_MINUTES = 10;
+const HOSTED_CALENDAR_FILE = "./training-camp-reminders.ics?v=calendar2";
 
 let db = null;
 let currentPage = "today";
@@ -994,21 +995,8 @@ function exportCalendarReminders() {
     return;
   }
 
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const exportTasks = state.tasks
-    .filter((task) => parseDate(task.send_at) >= startOfToday && !isTaskDone(task))
-    .sort(compareTaskTime);
-
-  if (!exportTasks.length) {
-    showToast("暂无需要导入的未来提醒", 2400);
-    return;
-  }
-
-  const ics = buildCalendarICS(exportTasks);
-  const filename = `训练营消息提醒-${toDateInput(new Date())}.ics`;
-  downloadTextFile(filename, ics, "text/calendar;charset=utf-8");
-  showToast(`已生成 ${exportTasks.length} 条日历提醒`, 3000);
+  showToast("正在打开日历文件，按手机提示添加即可", 3600);
+  window.location.href = HOSTED_CALENDAR_FILE;
 }
 
 function buildCalendarICS(tasks) {
