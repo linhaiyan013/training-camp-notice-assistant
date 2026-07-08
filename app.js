@@ -38,7 +38,7 @@ const ROLE_STORAGE_KEY = "training-camp-last-role";
 const REMINDER_ENABLED_KEY = "training-camp-reminders-enabled";
 const REMINDER_LAST_KEY = "training-camp-reminder-last";
 const REMINDER_REPEAT_MINUTES = 10;
-const HOSTED_CALENDAR_FILE = "./training-camp-reminders.ics?v=calendar2";
+const HOSTED_CALENDAR_FILE = "./training-camp-reminders.ics?v=teacher1";
 
 let db = null;
 let currentPage = "today";
