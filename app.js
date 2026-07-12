@@ -37,8 +37,11 @@ const ASSISTANT_STORAGE_KEY = "training-camp-assistant-code";
 const ROLE_STORAGE_KEY = "training-camp-last-role";
 const REMINDER_ENABLED_KEY = "training-camp-reminders-enabled";
 const REMINDER_LAST_KEY = "training-camp-reminder-last";
+const CLOUD_CACHE_KEY = "training-camp-cloud-cache-v2";
+const CLOUD_LOAD_TIMEOUT_MS = 12000;
+const CLOUD_RETRY_DELAYS = [1500, 3500, 7000, 12000];
 const REMINDER_REPEAT_MINUTES = 10;
-const HOSTED_CALENDAR_FILE = "./training-camp-reminders.ics?v=teacher1";
+const HOSTED_CALENDAR_FILE = "./training-camp-reminders.ics?v=mobile-stable1";
 
 let db = null;
 let currentPage = "today";
@@ -54,6 +57,8 @@ let remindersEnabled = window.localStorage.getItem(REMINDER_ENABLED_KEY) === "1"
 let reminderLastMap = readReminderLastMap();
 let reminderAudioContext = null;
 let appIntervalsStarted = false;
+let cloudRetryTimer = null;
+let cloudRetryAttempt = 0;
 let isAdmin = false;
 let hasAssistantAccess = false;
 
@@ -148,8 +153,8 @@ async function init() {
     openAssistantAccessModal();
     return;
   }
-  await loadCloudData();
-  renderAll();
+  const hasData = await loadCloudDataWithFallback();
+  if (hasData || hasAnyStateData()) renderAll();
   if (wantsAdminEntry && isAdmin) openAdminModal();
 }
 
@@ -160,8 +165,8 @@ function startAppIntervals() {
     if (!canAccessData()) return;
     const isEditingCamp = els.campForm.classList.contains("open");
     if (!activeTaskId && !isEditingCamp && currentPage !== "templates") {
-      await loadCloudData({ silent: true });
-      renderAll();
+      const synced = await loadCloudData({ silent: true });
+      if (synced) renderAll();
     }
   }, 30000);
   window.setInterval(() => {
@@ -186,6 +191,10 @@ function emptyState() {
   };
 }
 
+function hasAnyStateData() {
+  return Object.values(state).some((items) => Array.isArray(items) && items.length > 0);
+}
+
 async function setupSupabase() {
   const config = window.TRAINING_CAMP_SUPABASE;
   const publicKey = config?.publishableKey || config?.anonKey;
@@ -204,7 +213,7 @@ async function setupSupabase() {
     return true;
   } catch (error) {
     els.saveStatus.textContent = "云端连接失败";
-    renderFatal(`Supabase 连接失败：${error.message}`);
+    renderRecoverableCloudError(error);
     return false;
   }
 }
@@ -226,42 +235,184 @@ function rebuildSupabaseClient() {
 }
 
 async function loadCloudData({ silent = false } = {}) {
-  if (!db) return;
+  if (!db) return false;
   if (!canAccessData()) {
     renderAccessRequired();
-    return;
+    return false;
   }
   if (!silent) els.saveStatus.textContent = "同步云端中";
 
-  const [
-    camps,
-    groups,
-    lessons,
-    tasks,
-    statuses,
-    templates,
-    presets,
-    presetItems,
-  ] = await Promise.all([
-    selectAll(SUPABASE_TABLES.camps, "created_at"),
-    selectAll(SUPABASE_TABLES.groups, "position"),
-    selectAll(SUPABASE_TABLES.lessons, "sort_order"),
-    selectAll(SUPABASE_TABLES.tasks, "send_at"),
-    selectAll(SUPABASE_TABLES.statuses, "created_at"),
-    selectAll(SUPABASE_TABLES.templates, "sort_order"),
-    selectAll(SUPABASE_TABLES.presets, "created_at"),
-    selectAll(SUPABASE_TABLES.presetItems, "sort_order"),
-  ]);
+  try {
+    const [
+      camps,
+      groups,
+      lessons,
+      tasks,
+      statuses,
+      templates,
+      presets,
+      presetItems,
+    ] = await withTimeout(Promise.all([
+      selectAll(SUPABASE_TABLES.camps, "created_at"),
+      selectAll(SUPABASE_TABLES.groups, "position"),
+      selectAll(SUPABASE_TABLES.lessons, "sort_order"),
+      selectAll(SUPABASE_TABLES.tasks, "send_at"),
+      selectAll(SUPABASE_TABLES.statuses, "created_at"),
+      selectAll(SUPABASE_TABLES.templates, "sort_order"),
+      selectAll(SUPABASE_TABLES.presets, "created_at"),
+      selectAll(SUPABASE_TABLES.presetItems, "sort_order"),
+    ]), CLOUD_LOAD_TIMEOUT_MS);
 
-  state = { camps, groups, lessons, tasks, statuses, templates, presets, presetItems };
-  els.saveStatus.textContent = "云端已同步";
+    state = { camps, groups, lessons, tasks, statuses, templates, presets, presetItems };
+    cacheCloudState();
+    clearCloudRetry();
+    els.saveStatus.textContent = "云端已同步";
+    return true;
+  } catch (error) {
+    if (!silent) handleCloudLoadFailure(error);
+    scheduleCloudRetry();
+    return false;
+  }
+}
+
+async function loadCloudDataWithFallback() {
+  const synced = await loadCloudData();
+  if (synced) return true;
+  const cached = readCachedCloudState();
+  if (cached) {
+    state = cached.state;
+    els.saveStatus.textContent = "离线缓存";
+    showToast(`云端暂时慢，先显示上次同步数据：${formatCacheTime(cached.savedAt)}`, 4200);
+    return true;
+  }
+  return false;
+}
+
+function withTimeout(promise, timeoutMs) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error("云端连接超时，请稍后重试")), timeoutMs);
+    }),
+  ]);
+}
+
+function cacheCloudState() {
+  try {
+    window.localStorage.setItem(CLOUD_CACHE_KEY, JSON.stringify({
+      savedAt: new Date().toISOString(),
+      state,
+    }));
+  } catch (error) {
+    console.warn("Cloud cache failed", error);
+  }
+}
+
+function readCachedCloudState() {
+  try {
+    const cached = JSON.parse(window.localStorage.getItem(CLOUD_CACHE_KEY) || "null");
+    if (!cached?.state) return null;
+    const nextState = { ...emptyState(), ...cached.state };
+    const valid = Object.values(nextState).every((items) => Array.isArray(items));
+    return valid ? { savedAt: cached.savedAt, state: nextState } : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function handleCloudLoadFailure(error) {
+  const cached = readCachedCloudState();
+  if (cached) {
+    state = cached.state;
+    els.saveStatus.textContent = "离线缓存";
+    showToast(`云端暂时慢，先显示上次同步数据：${formatCacheTime(cached.savedAt)}`, 4200);
+    return true;
+  }
+  els.saveStatus.textContent = "云端重试中";
+  renderRecoverableCloudError(error);
+  return false;
+}
+
+function renderRecoverableCloudError(error) {
+  const message = `
+    <div class="empty-state cloud-error">
+      <strong>云端连接有点慢</strong>
+      <span>页面正在自动重试。你也可以点下面按钮手动重连。</span>
+      <small>${escapeHTML(error?.message || "网络暂时不可用")}</small>
+      <button class="primary-button small" type="button" data-cloud-retry>重新连接</button>
+    </div>
+  `;
+  els.todayList.innerHTML = message;
+  els.calendarDayList.innerHTML = message;
+  els.campList.innerHTML = message;
+  els.templateList.innerHTML = message;
+  bindCloudRetryButtons();
+}
+
+function bindCloudRetryButtons() {
+  document.querySelectorAll("[data-cloud-retry]").forEach((button) => {
+    button.addEventListener("click", retryCloudNow);
+  });
+}
+
+async function retryCloudNow() {
+  clearCloudRetry();
+  if (!db) {
+    const ready = await setupSupabase();
+    if (!ready) return;
+  }
+  if (!canAccessData()) {
+    renderAccessRequired();
+    openAssistantAccessModal();
+    return;
+  }
+  els.saveStatus.textContent = "重新连接中";
+  const synced = await loadCloudData();
+  if (synced) {
+    renderAll();
+    showToast("云端已恢复，数据已更新");
+  }
+}
+
+function scheduleCloudRetry() {
+  if (cloudRetryTimer || !db || !canAccessData()) return;
+  const delay = CLOUD_RETRY_DELAYS[Math.min(cloudRetryAttempt, CLOUD_RETRY_DELAYS.length - 1)];
+  cloudRetryAttempt += 1;
+  cloudRetryTimer = window.setTimeout(async () => {
+    cloudRetryTimer = null;
+    const synced = await loadCloudData({ silent: true });
+    if (synced) {
+      renderAll();
+      showToast("云端已恢复，数据已更新");
+      return;
+    }
+    scheduleCloudRetry();
+  }, delay);
+}
+
+function clearCloudRetry() {
+  if (cloudRetryTimer) window.clearTimeout(cloudRetryTimer);
+  cloudRetryTimer = null;
+  cloudRetryAttempt = 0;
+}
+
+function formatCacheTime(value) {
+  if (!value) return "刚刚";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "刚刚";
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 async function selectAll(table, orderColumn) {
   let query = db.from(table).select("*");
   if (orderColumn) query = query.order(orderColumn, { ascending: true });
   const { data, error } = await query;
-  if (error) throwAndRender(error);
+  if (error) throw new Error(`${table}: ${error.message}`);
   return data || [];
 }
 
@@ -588,7 +739,24 @@ async function verifyAssistantSession({ silent = false } = {}) {
     setAssistantAccessState(false);
     return false;
   }
-  const { data, error } = await db.rpc("verify_assistant_code");
+  let data = null;
+  let error = null;
+  try {
+    const result = await withTimeout(db.rpc("verify_assistant_code"), CLOUD_LOAD_TIMEOUT_MS);
+    data = result.data;
+    error = result.error;
+  } catch (verifyError) {
+    const isStoredCode = window.localStorage.getItem(ASSISTANT_STORAGE_KEY) === assistantCode;
+    if (isStoredCode) {
+      setAssistantAccessState(true);
+      scheduleCloudRetry();
+      if (!silent) showToast("云端连接慢，先保留助理登录状态");
+      return true;
+    }
+    setAssistantAccessState(false);
+    if (!silent) showToast("云端连接慢，请稍后再试");
+    return false;
+  }
   const ok = !error && data === true;
   if (!ok) {
     assistantCode = "";
@@ -713,7 +881,24 @@ async function verifyAdminSession({ silent = false } = {}) {
     setAdminState(false);
     return false;
   }
-  const { data, error } = await db.rpc("verify_admin_code");
+  let data = null;
+  let error = null;
+  try {
+    const result = await withTimeout(db.rpc("verify_admin_code"), CLOUD_LOAD_TIMEOUT_MS);
+    data = result.data;
+    error = result.error;
+  } catch (verifyError) {
+    const isStoredCode = window.localStorage.getItem(ADMIN_STORAGE_KEY) === adminCode;
+    if (isStoredCode) {
+      setAdminState(true);
+      scheduleCloudRetry();
+      if (!silent) showToast("云端连接慢，先保留管理员登录状态");
+      return true;
+    }
+    setAdminState(false);
+    if (!silent) showToast("云端连接慢，请稍后再试");
+    return false;
+  }
   const ok = !error && data === true;
   if (!ok) {
     adminCode = "";
@@ -1905,9 +2090,9 @@ async function reloadAndRender(toastMessage = "") {
     openAssistantAccessModal();
     return;
   }
-  await loadCloudData({ silent: true });
-  renderAll();
-  if (toastMessage) showToast(toastMessage);
+  const synced = await loadCloudDataWithFallback();
+  if (synced || hasAnyStateData()) renderAll();
+  if (toastMessage) showToast(synced ? toastMessage : "云端暂时慢，正在自动重连");
 }
 
 async function cloudInsert(table, row, shouldSelect = false) {

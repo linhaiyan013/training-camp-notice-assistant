@@ -518,6 +518,32 @@ p {
   border-radius: 16px;
 }
 
+.cloud-error {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  border-style: solid;
+  border-color: rgba(199, 24, 111, 0.22);
+  background: rgba(255, 245, 250, 0.94);
+}
+
+.cloud-error strong {
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.cloud-error span,
+.cloud-error small {
+  display: block;
+  line-height: 1.55;
+}
+
+.cloud-error small {
+  max-width: 100%;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .helper-text {
   color: var(--muted);
   line-height: 1.55;
